@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.21</title>
+  <title>OFC Pineapple Poker v1.22</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -1284,14 +1284,14 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   }
 
   const currentTurn = gs.turn;
-  const _phase = String(gs.phase || "").trim();
-  const _turn = Number(gs.turn);
-  const _me = Number(myPlayerIdx);
-  const isMyTurn = !gs.roundOver && (
-    _phase === "initial_place" ||
-    _phase === "fantasyland" ||
-    (_phase === "pineapple" && _turn === _me)
-  );
+  const isMyTurn = !gs.roundOver && (() => {
+    const _phase = String(gs.phase || "").trim();
+    const _turn = Number(gs.turn);
+    const _me = Number(myPlayerIdx);
+    return _phase === "initial_place" ||
+           _phase === "fantasyland" ||
+           (_phase === "pineapple" && _turn === _me);
+  })();
   const opponentIdx = (mySlot !== null && mySlot !== undefined) ? (mySlot === 0 ? 1 : 0) : (currentTurn === 0 ? 1 : 0);
 
   // Build display player with draft rows
@@ -1373,7 +1373,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
             </div>
           )}
           <div style={{textAlign:"center",fontSize:10,color:"rgba(255,255,0,0.5)",marginBottom:4}}>
-            phase:[{_phase}] turn:{_turn} me:{_me} mySlot:{String(mySlot)} isMyTurn:{String(isMyTurn)}
+            phase:[{String(gs.phase)}] turn:{String(gs.turn)} me:{String(myPlayerIdx)} mySlot:{String(mySlot)} isMyTurn:{String(isMyTurn)}
           </div>
           <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
             {phase==="fantasyland"
@@ -1814,7 +1814,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.21</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.22</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
