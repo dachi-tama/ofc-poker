@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.35</title>
+  <title>OFC Pineapple Poker v1.36</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -1062,7 +1062,8 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 
     if (phase === "fantasyland" || myIsFL) {
       const total = draft.rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0);
-      if (total !== 13) { alert("13枚すべて配置してください"); return; }
+      if (total < 13) { alert("13枚すべて配置してください"); return; }
+      if (total > 13) { alert("13枚だけ配置してください"); return; }
       p.rows = sortRows(draft.rows);
       p.fantasyDone = true;
       ng.fantasyCards[myPlayerIdx] = draft.hand; // save remaining fantasy cards
@@ -1089,34 +1090,76 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       ng.pineappleCards[myPlayerIdx] = draft.hand;
       ng.playersDone[myPlayerIdx] = true;
       setDraft(null); setSelectedHandIdx(null); setBaseRows(null);
-      // Initial place: simultaneous - both must confirm
-      if (ng.playersDone[0] && ng.playersDone[1]) {
-        ng.playersDone = [false, false];
-        pushToFirebase(ng);
-        advanceGame(ng);
+
+      const hasFL = ng.players.some(pl => pl.inFantasyland);
+      if (hasFL) {
+        // Mixed FL round: non-FL player advances independently to pineapple
+        if (!myIsFL) {
+          // Deal pineapple cards for this player only
+          if (!Array.isArray(ng.pineappleCards)) ng.pineappleCards = [null, null];
+          let didx = ng.deckIdx || 0;
+          ng.pineappleCards[myPlayerIdx] = ng.deck.slice(didx, didx+3);
+          ng.deckIdx = didx + 3;
+          ng.phase = "pineapple_mixed"; // special phase for mixed round
+          ng.turn = myPlayerIdx;
+          pushToFirebase(ng);
+        } else {
+          pushToFirebase(ng);
+        }
       } else {
-        pushToFirebase(ng);
+        // Normal: simultaneous - both must confirm
+        if (ng.playersDone[0] && ng.playersDone[1]) {
+          ng.playersDone = [false, false];
+          pushToFirebase(ng);
+          advanceGame(ng);
+        } else {
+          pushToFirebase(ng);
+        }
       }
       return;
     }
 
-    if (phase === "pineapple") {
+    if (phase === "pineapple" || phase === "pineapple_mixed") {
       if (placed < 2) { alert("2枚配置してください"); return; }
       if (placed > 2) { alert("2枚だけ配置してください"); return; }
       p.rows = sortRows(draft.rows);
       ng.pineappleCards[myPlayerIdx] = draft.hand;
       setDraft(null); setSelectedHandIdx(null); setBaseRows(null);
 
-      // Pineapple: turn-based
-      // turn=0: P1's turn. When P1 confirms -> turn=1 (P2's turn)
-      // turn=1: P2's turn. When P2 confirms -> advanceGame
+      const hasFL2 = ng.players.some(pl => pl.inFantasyland);
+
+      if (hasFL2 && phase === "pineapple_mixed") {
+        // Non-FL player in mixed round: acts independently
+        const myTotal = p.rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0);
+        if (myTotal >= 13) {
+          // Non-FL player done - check if FL player also done
+          ng.playersDone[myPlayerIdx] = true;
+          const flIdx = ng.players.findIndex(pl=>pl.inFantasyland);
+          if (ng.playersDone[flIdx]) {
+            // Both done
+            ng.playersDone = [false, false];
+            pushToFirebase(ng);
+            advanceGame(ng);
+          } else {
+            pushToFirebase(ng);
+          }
+        } else {
+          // Non-FL player needs more cards
+          let didx = ng.deckIdx || 0;
+          ng.pineappleCards[myPlayerIdx] = ng.deck.slice(didx, didx+3);
+          ng.deckIdx = didx + 3;
+          ng.turn = myPlayerIdx;
+          pushToFirebase(ng);
+        }
+        return;
+      }
+
+      // Normal pineapple: turn-based P1->P2->advance
       if (Number(ng.turn) === 0) {
-        // P1 just confirmed - switch to P2
         ng.turn = 1;
         ng.message = "Player 2のターン";
         pushToFirebase(ng);
       } else {
-        // P2 just confirmed - both done, advance
         ng.playersDone = [false, false];
         advanceGame(ng);
       }
@@ -1146,7 +1189,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       return;
     }
 
-    if (phase === "pineapple") {
+    if (phase === "pineapple" || phase === "pineapple_mixed") {
       const allDone = ng.players.every(p => p.rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0) === 13);
       if (allDone) {
         const result = calcScore(ng);
@@ -1344,10 +1387,16 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
     const _turn = Number(gs.turn);
     const _me = Number(myPlayerIdx);
     const _imFL = gs.players && gs.players[_me] && gs.players[_me].inFantasyland;
-    return _phase === "initial_place" ||
-           _phase === "fantasyland" ||
-           _imFL ||
-           (_phase === "pineapple" && _turn === _me);
+    const _myTotalCards = gs.players && gs.players[_me] && Array.isArray(gs.players[_me].rows)
+      ? gs.players[_me].rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0) : 0;
+    // Already placed 13 = done
+    if (_myTotalCards >= 13) return false;
+    if (_imFL) return true; // FL player always their turn
+    if (_phase === "initial_place") return true; // simultaneous
+    if (_phase === "pineapple" && _turn === _me) return true; // turn-based for non-FL
+    if (_phase === "pineapple_mixed" && !_imFL) return true; // non-FL independent
+    if (!_imFL && _phase === "initial_place") return true;
+    return false;
   })();
   const opponentIdx = (mySlot !== null && mySlot !== undefined) ? (mySlot === 0 ? 1 : 0) : (currentTurn === 0 ? 1 : 0);
 
@@ -1370,7 +1419,8 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
         ? draft.rows.reduce((s,r)=>s+r.length,0)
         : countPlaced(draft.rows, effectiveBase))
     : 0;
-  const neededToPlace = phase === "initial_place" ? 5 : phase === "fantasyland" ? 13 : 2;
+  const myIsFL2 = gs.players && gs.players[myPlayerIdx] && gs.players[myPlayerIdx].inFantasyland;
+  const neededToPlace = myIsFL2 ? 13 : (phase === "initial_place" ? 5 : phase === "fantasyland" ? 13 : 2);
   const maxToPlace = neededToPlace;
   const canConfirm = placedThisTurn === maxToPlace;
 
@@ -1875,7 +1925,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.35</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.36</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
