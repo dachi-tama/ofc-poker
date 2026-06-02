@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.37</title>
+  <title>OFC Pineapple Poker v1.38</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -960,9 +960,18 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   function placeCard(handIdx, rowIdx) {
     if (!gs) return;
     const _p = String(gs.phase || "").trim();
-    const _canPlace = _p === "initial_place" || _p === "fantasyland" ||
-      (_p === "pineapple" && Number(gs.turn) === Number(mySlot !== null ? mySlot : 0));
-    if (!_canPlace || gs.roundOver) return;
+    const _me = Number(mySlot !== null ? mySlot : 0);
+    const _imFL = gs.players && gs.players[_me] && gs.players[_me].inFantasyland;
+    const _myCards = gs.players && gs.players[_me] && Array.isArray(gs.players[_me].rows)
+      ? gs.players[_me].rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0) : 0;
+    const _canPlace = !gs.roundOver && _myCards < 13 && (
+      _imFL ||
+      _p === "initial_place" ||
+      _p === "fantasyland" ||
+      (_p === "pineapple" && Number(gs.turn) === _me) ||
+      (_p === "pineapple_mixed" && !_imFL)
+    );
+    if (!_canPlace) return;
 
     const d = activeDraft ? JSON.parse(JSON.stringify(activeDraft)) : initDraft();
     if (!d) return;
@@ -985,10 +994,17 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   // Remove a card from board back to hand (undo)
   function removeCardFromRow(rowIdx, cardIdx) {
     if (!gs) return;
-    const _p2 = String(gs.phase || "").trim();
-    const _canRemove = _p2 === "initial_place" || _p2 === "fantasyland" ||
-      (_p2 === "pineapple" && Number(gs.turn) === Number(mySlot !== null ? mySlot : 0));
-    if (!_canRemove || gs.roundOver) return;
+    const _p3 = String(gs.phase || "").trim();
+    const _me3 = Number(mySlot !== null ? mySlot : 0);
+    const _imFL3 = gs.players && gs.players[_me3] && gs.players[_me3].inFantasyland;
+    const _canRemove = !gs.roundOver && (
+      _imFL3 ||
+      _p3 === "initial_place" ||
+      _p3 === "fantasyland" ||
+      (_p3 === "pineapple" && Number(gs.turn) === _me3) ||
+      (_p3 === "pineapple_mixed" && !_imFL3)
+    );
+    if (!_canRemove) return;
     const d = activeDraft ? JSON.parse(JSON.stringify(activeDraft)) : initDraft();
     if (!d) return;
 
@@ -1366,25 +1382,42 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   );
 
   const currentTurn = gs.turn;
-  const opponentIdx = currentTurn === 0 ? 1 : 0;
+  const myPlayerIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
+  const opponentIdx = myPlayerIdx === 0 ? 1 : 0;
+  const isMyTurn = !gs.roundOver && (() => {
+    const _phase = String(gs.phase || "").trim();
+    const _turn = Number(gs.turn);
+    const _me = Number(myPlayerIdx);
+    const _imFL = gs.players && gs.players[_me] && gs.players[_me].inFantasyland;
+    const _myCards = gs.players && gs.players[_me] && Array.isArray(gs.players[_me].rows)
+      ? gs.players[_me].rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0) : 0;
+    if (_myCards >= 13) return false;
+    if (_imFL) return true;
+    if (_phase === "initial_place") return true;
+    if (_phase === "pineapple" && _turn === _me) return true;
+    if (_phase === "pineapple_mixed" && !_imFL) return true;
+    return false;
+  })();
 
   // Build display player with draft rows
   const displayPlayer = gs && draft ? {
-    ...gs.players[currentTurn],
+    ...gs.players[myPlayerIdx],
     rows: draft.rows,
-  } : gs?.players[currentTurn];
+  } : gs?.players[myPlayerIdx];
 
   const handRaw = currentHand;
   const remainingHand = handRaw.filter(Boolean);
   const phase = gs.phase;
 
   // Count how many placed this turn
+  const myIsFL2 = gs.players && gs.players[myPlayerIdx] && gs.players[myPlayerIdx].inFantasyland;
+  const effectiveBase = baseRows || (gs.players[myPlayerIdx] && Array.isArray(gs.players[myPlayerIdx].rows) ? gs.players[myPlayerIdx].rows : [[], [], []]);
   const placedThisTurn = draft
-    ? (phase === "fantasyland"
-        ? draft.rows.reduce((s,r)=>s+r.length,0)
-        : countPlaced(draft.rows, gs.players[currentTurn].rows))
+    ? (myIsFL2 || phase === "fantasyland"
+        ? draft.rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0)
+        : countPlaced(draft.rows, effectiveBase))
     : 0;
-  const neededToPlace = phase === "initial_place" ? 5 : phase === "fantasyland" ? 13 : 2;
+  const neededToPlace = (myIsFL2 || phase === "fantasyland") ? 13 : phase === "initial_place" ? 5 : 2;
   const maxToPlace = neededToPlace;
   const canConfirm = placedThisTurn === maxToPlace;
 
@@ -1578,7 +1611,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
               <div style={{textAlign:"center",marginTop:12}}>
                 <button
                   onClick={confirmTurn}
-                  disabled={!canConfirm}
+                  disabled={!canConfirm || !isMyTurn}
                   style={{
                     background: canConfirm
                       ? "linear-gradient(135deg,#166534,#22c55e,#166534)"
@@ -1850,7 +1883,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.37</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.38</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
