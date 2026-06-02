@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.17</title>
+  <title>OFC Pineapple Poker v1.18</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -734,8 +734,9 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
               setDraft(null);
               setSelectedHandIdx(null);
               // Snapshot rows at turn start
-              const myRows = fixedGs.players && fixedGs.players[myPlayerIdx] && Array.isArray(fixedGs.players[myPlayerIdx].rows)
-                ? fixedGs.players[myPlayerIdx].rows.map(r => Array.isArray(r) ? [...r] : [])
+              const myIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
+              const myRows = fixedGs.players && fixedGs.players[myIdx] && Array.isArray(fixedGs.players[myIdx].rows)
+                ? fixedGs.players[myIdx].rows.map(r => Array.isArray(r) ? [...r] : [])
                 : [[], [], []];
               setBaseRows(myRows);
             }
@@ -864,7 +865,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   function initDraft() {
     try {
       if (!gs || !gs.players) return null;
-      const myIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : (gs.turn || 0);
+      const myIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
       const p = gs.players[myIdx];
       if (!p) return null;
 
@@ -890,7 +891,8 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       }
 
       const rawHand = gs.pineappleCards && gs.pineappleCards[myIdx];
-      const hand = Array.isArray(rawHand) ? rawHand : Object.values(rawHand || {});
+      const hand = Array.isArray(rawHand) ? rawHand : 
+                   (rawHand && typeof rawHand === 'object') ? Object.values(rawHand) : [];
 
       return { rows, hand: [...hand] };
     } catch(e) {
@@ -1291,7 +1293,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 
   // Build display player with draft rows
   // Always show MY player at bottom, opponent at top
-  const myPlayerIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : currentTurn;
+  const myPlayerIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
   const displayPlayer = gs && draft && currentTurn === myPlayerIdx ? {
     ...gs.players[myPlayerIdx],
     rows: draft.rows,
@@ -1806,7 +1808,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.17</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.18</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
