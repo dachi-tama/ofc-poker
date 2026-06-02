@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.18</title>
+  <title>OFC Pineapple Poker v1.19</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -1072,9 +1072,9 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       setDraft(null); setSelectedHandIdx(null); setBaseRows(null);
 
       // Pineapple: turn-based (P1 first, then P2 sees P1's board)
-      if (myPlayerIdx === ng.turn) {
+      if (Number(myPlayerIdx) === Number(ng.turn)) {
         // My turn done - switch to opponent
-        const nextTurn = ng.turn === 0 ? 1 : 0;
+        const nextTurn = Number(ng.turn) === 0 ? 1 : 0;
         ng.turn = nextTurn;
         ng.message = `Player ${nextTurn+1}のターン`;
         pushToFirebase(ng);
@@ -1287,7 +1287,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   const isMyTurn = !gs.roundOver && (
     gs.phase === "initial_place" ||
     gs.phase === "fantasyland" ||
-    (gs.phase === "pineapple" && gs.turn === myPlayerIdx)
+    (gs.phase === "pineapple" && Number(gs.turn) === Number(myPlayerIdx))
   );
   const opponentIdx = (mySlot !== null && mySlot !== undefined) ? (mySlot === 0 ? 1 : 0) : (currentTurn === 0 ? 1 : 0);
 
@@ -1366,7 +1366,12 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
         }}>
           {!isMyTurn && !gs.roundOver && (
             <div style={{textAlign:"center",color:"rgba(255,255,255,0.4)",fontSize:12,marginBottom:8,padding:"6px 12px",background:"rgba(255,255,255,0.03)",borderRadius:8}}>
-              ⏳ 相手のターンです...
+              ⏳ 相手のターンです... (turn:{String(gs.turn)} me:{String(myPlayerIdx)})
+            </div>
+          )}
+          {isMyTurn && gs.phase === "pineapple" && (
+            <div style={{textAlign:"center",color:"rgba(255,215,0,0.6)",fontSize:11,marginBottom:4}}>
+              あなたのターン (turn:{String(gs.turn)} me:{String(myPlayerIdx)})
             </div>
           )}
           <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
@@ -1808,7 +1813,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.18</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.19</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
