@@ -708,14 +708,17 @@ function OFCGame({ roomCode, mySlot, db }) {
     const handler = snap => {
       const data = snap.val();
       if (!data) return;
-      if (data.gs !== undefined) setGs(data.gs);
+      // Only update gs if it's a complete valid state
+      if (data.gs && data.gs.players && data.gs.players.length === 2 && data.gs.turn !== undefined) {
+        setGs(data.gs);
+        setDraft(null);
+        setSelectedHandIdx(null);
+      }
       if (data.totalRounds !== undefined) setTotalRounds(data.totalRounds);
       if (data.currentRound !== undefined) setCurrentRound(data.currentRound);
       if (data.totalScores !== undefined) setTotalScores(data.totalScores);
       if (data.gameOver !== undefined) setGameOver(data.gameOver);
       setShowScore(data.showScore || null);
-      setDraft(null);
-      setSelectedHandIdx(null);
     };
     roomRef.on("value", handler);
     return () => roomRef.off("value", handler);
@@ -809,19 +812,23 @@ function OFCGame({ roomCode, mySlot, db }) {
 
   // Initialize draft for current turn
   function initDraft() {
-    if (!gs) return null;
+    if (!gs || !gs.players || gs.turn === undefined) return null;
     const p = gs.players[gs.turn];
+    if (!p) return null;
     if (gs.phase === "fantasyland") {
-      // FL: hand is the full fantasyCards deal, rows start empty
       return {
         rows: [[], [], []],
-        hand: [...(gs.fantasyCards[gs.turn] || [])],
+        hand: [...((gs.fantasyCards && gs.fantasyCards[gs.turn]) || [])],
       };
     }
-    return {
-      rows: JSON.parse(JSON.stringify(p.rows)),
-      hand: [...(gs.pineappleCards[gs.turn] || [])],
-    };
+    try {
+      return {
+        rows: JSON.parse(JSON.stringify(p.rows || [[],[],[]])),
+        hand: [...((gs.pineappleCards && gs.pineappleCards[gs.turn]) || [])],
+      };
+    } catch(e) {
+      return { rows: [[],[],[]], hand: [] };
+    }
   }
 
   // Get current working state (draft if active, else from gs)
@@ -889,6 +896,7 @@ function OFCGame({ roomCode, mySlot, db }) {
   // Confirm turn: commit draft to game state
   function confirmTurn() {
     if (!gs || !draft) return;
+    if (!gs || !gs.players) return;
     const ng = JSON.parse(JSON.stringify(gs));
     const p = ng.players[ng.turn];
     const phase = ng.phase;
@@ -1129,7 +1137,20 @@ function OFCGame({ roomCode, mySlot, db }) {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
-  if (!gs) return (
+  // Show loading while waiting for Firebase sync
+  if (!gs || !gs.players || gs.turn === undefined) return (
+    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0d2440 0%,#060d18 70%)",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontFamily:"Georgia,serif",fontSize:18}}>
+      {mySlot === 0 ? "ラウンド数を選んでゲームを開始してください..." : "⏳ ホストがゲームを開始するのを待っています..."}
+    </div>
+  );
+
+  if (!gs.players[0] || !gs.players[1]) return (
+    <div style={{minHeight:"100vh",background:"#060d18",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontSize:18}}>
+      ⏳ 同期中...
+    </div>
+  );
+
+  if (false) return (
     <div style={{
       minHeight:"100vh",
       background:"radial-gradient(ellipse at 50% 0%, #0d2440 0%, #060d18 70%)",
