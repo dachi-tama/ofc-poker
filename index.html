@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.03</title>
+  <title>OFC Pineapple Poker v1.04</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -688,17 +688,44 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   React.useEffect(() => {
     if (!remoteState) return;
     try {
-      if (remoteState.gs && remoteState.gs.players &&
-          Array.isArray(remoteState.gs.players) &&
-          remoteState.gs.players.length === 2 &&
-          remoteState.gs.turn !== undefined) {
-        setGs(remoteState.gs);
-        setDraft(null);
-        setSelectedHandIdx(null);
+      // Deep-fix arrays (Firebase converts arrays to objects)
+      function deepFixArrays(obj) {
+        if (obj === null || obj === undefined) return obj;
+        if (Array.isArray(obj)) return obj.map(deepFixArrays);
+        if (typeof obj !== "object") return obj;
+        const keys = Object.keys(obj);
+        const isArr = keys.length > 0 && keys.every(k => !isNaN(parseInt(k)) && parseInt(k) >= 0);
+        if (isArr) {
+          const arr = [];
+          keys.forEach(k => { arr[parseInt(k)] = deepFixArrays(obj[k]); });
+          return arr;
+        }
+        const r = {};
+        for (const k of keys) r[k] = deepFixArrays(obj[k]);
+        return r;
+      }
+
+      if (remoteState.gs) {
+        const fixedGs = deepFixArrays(remoteState.gs);
+        if (fixedGs.players && Array.isArray(fixedGs.players) &&
+            fixedGs.players.length === 2 && fixedGs.turn !== undefined) {
+          // Ensure rows are arrays
+          fixedGs.players.forEach(p => {
+            if (!Array.isArray(p.rows)) p.rows = [[], [], []];
+            p.rows = p.rows.map(r => Array.isArray(r) ? r : []);
+          });
+          if (!Array.isArray(fixedGs.pineappleCards)) fixedGs.pineappleCards = [null, null];
+          if (!Array.isArray(fixedGs.fantasyCards)) fixedGs.fantasyCards = [null, null];
+          if (!Array.isArray(fixedGs.deck)) fixedGs.deck = [];
+          setGs(fixedGs);
+          setDraft(null);
+          setSelectedHandIdx(null);
+        }
       }
       if (remoteState.totalRounds !== undefined) setTotalRounds(remoteState.totalRounds);
       if (remoteState.currentRound !== undefined) setCurrentRound(remoteState.currentRound);
-      if (Array.isArray(remoteState.totalScores)) setTotalScores(remoteState.totalScores);
+      const ts = remoteState.totalScores;
+      if (ts) setTotalScores(Array.isArray(ts) ? ts : [ts[0]||0, ts[1]||0]);
       if (remoteState.gameOver !== undefined) setGameOver(remoteState.gameOver);
       setShowScore(remoteState.showScore || null);
     } catch(e) {
@@ -1693,7 +1720,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.03</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.04</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
