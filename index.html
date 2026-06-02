@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.26</title>
+  <title>OFC Pineapple Poker v1.27</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -986,9 +986,17 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
     if (cardIdx < origLen) return; // can't remove pre-existing card
 
     d.rows[rowIdx] = d.rows[rowIdx].filter((_,i)=>i!==cardIdx);
-    const nullIdx = d.hand.findIndex(c=>c===null);
-    if (nullIdx >= 0) d.hand[nullIdx] = card;
-    else d.hand.push(card);
+    // Ensure hand is a proper array
+    if (!Array.isArray(d.hand)) {
+      d.hand = Object.values(d.hand || {});
+    }
+    // Return card to hand - find null slot or append
+    const nullIdx = d.hand.findIndex(c => c === null || c === undefined);
+    if (nullIdx >= 0) {
+      d.hand[nullIdx] = card;
+    } else {
+      d.hand = [...d.hand, card];
+    }
     setDraft(d);
     // Push draft rows so opponent can see in real-time
     if (gs) {
@@ -1831,7 +1839,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.26</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.27</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
