@@ -1186,18 +1186,23 @@ function OFCGame({ roomCode, mySlot, db }) {
           3. ✔ 確定ボタンを押してターン終了<br/>
           4. Bot ≥ Mid ≥ Top になるよう配置
         </div>
-        <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
-          {[5,10,20].map(n=>(
-            <button key={n} onClick={()=>startGame(n)} style={{
-              background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",
-              color:"#0d1a2e",border:"none",borderRadius:10,
-              padding:"12px 28px",fontSize:16,fontWeight:700,
-              cursor:"pointer",letterSpacing:1,
-              fontFamily:"'Playfair Display',serif",
-              boxShadow:"0 4px 24px rgba(255,215,0,0.3)",
-            }}>{n}ラウンド</button>
-          ))}
-        </div>
+        {mySlot === 0 || mySlot === null ? (
+          <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+            {[5,10,20].map(n=>(
+              <button key={n} onClick={()=>startGame(n)} style={{
+                background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",
+                color:"#0d1a2e",border:"none",borderRadius:10,
+                padding:"12px 28px",fontSize:16,fontWeight:700,
+                cursor:"pointer",letterSpacing:1,
+                boxShadow:"0 4px 24px rgba(255,215,0,0.3)",
+              }}>{n}ラウンド</button>
+            ))}
+          </div>
+        ) : (
+          <div style={{color:"rgba(255,255,255,0.4)",fontSize:14,textAlign:"center",padding:16}}>
+            ⏳ ホスト（Player 1）がラウンド数を選ぶのを待っています...
+          </div>
+        )}
       </div>
     </div>
   );
