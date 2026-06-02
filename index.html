@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.34</title>
+  <title>OFC Pineapple Poker v1.35</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -359,7 +359,7 @@ function evalHand(cards) {
   const jokerCount = cards.length - realCards.length;
   const n = cards.length;
   // If unresolved jokers present, return placeholder
-  if (jokerCount > 0) return { rank: -1, name: "🃏 Joker" };
+  if (jokerCount > 0 && n <= 5) return { rank: -1, name: "🃏 Joker" }; // unresolved joker
   const vals = realCards.map(c => RANK_VAL[c.r]).sort((a,b)=>b-a);
   const suits = realCards.map(c => c.s);
   const flush = n === 5 && suits.every(s => s === suits[0]);
@@ -719,10 +719,16 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
         const fixedGs = deepFixArrays(remoteState.gs);
         if (fixedGs.players && Array.isArray(fixedGs.players) &&
             fixedGs.players.length === 2 && fixedGs.turn !== undefined) {
-          // Ensure rows are arrays
+          // Ensure rows are arrays and normalize joker cards
           fixedGs.players.forEach(p => {
             if (!Array.isArray(p.rows)) p.rows = [[], [], []];
-            p.rows = p.rows.map(r => Array.isArray(r) ? r : []);
+            p.rows = p.rows.map(r => Array.isArray(r) ? r.map(c => {
+              if (!c) return c;
+              if (c.id === "JOKERr" || c.id === "JOKERb") return {...c, r:"JOKER"};
+              if (c.r === "JOKER") return c;
+              if (c.s === "r" || c.s === "b") return {...c, r:"JOKER"};
+              return c;
+            }) : []);
           });
           if (!Array.isArray(fixedGs.pineappleCards)) fixedGs.pineappleCards = [null, null];
           if (!Array.isArray(fixedGs.fantasyCards)) fixedGs.fantasyCards = [null, null];
@@ -1253,8 +1259,12 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       fantasylandContinue0: fl0continue,
       fantasylandContinue1: fl1continue,
       nextFL: [next0, next1],
-      hands0: resolved0.map(evalHand),
-      hands1: resolved1.map(evalHand),
+      hands0: (resolved0 || p0.rows).map(row => {
+          const h = evalHand(row); return h.rank >= 0 ? h : {rank:0, name:"ハイカード"};
+        }),
+        hands1: (resolved1 || p1.rows).map(row => {
+          const h = evalHand(row); return h.rank >= 0 ? h : {rank:0, name:"ハイカード"};
+        }),
     };
   }
 
@@ -1865,7 +1875,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.34</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.35</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
