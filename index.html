@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="cache-bust" content="v1.44-2026">
+  <meta name="cache-bust" content="v1.46-2026">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.44</title>
+  <title>OFC Pineapple Poker v1.46</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -615,7 +615,7 @@ function RowSlot({ label, capacity, cards, highlight, onSlotClick, onDrop, evalI
 }
 
 function PlayerBoard({ player, playerIdx, turn, onRowClick, selectedCard, isOpponent, onDropToRow, dragOverRow }) {
-  // Safety: ensure rows are arrays
+  if (!player) return null;
   const rawPlayerRows = Array.isArray(player.rows) ? player.rows : [];
   const top = Array.isArray(rawPlayerRows[0]) ? rawPlayerRows[0] : [];
   const mid = Array.isArray(rawPlayerRows[1]) ? rawPlayerRows[1] : [];
@@ -1380,6 +1380,38 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
     </div>
   );
 
+  // Normalize gs.players rows before rendering
+  if (gs && gs.players) {
+    gs.players.forEach(p => {
+      if (!Array.isArray(p.rows)) p.rows = [[], [], []];
+      p.rows = [0,1,2].map(i => Array.isArray(p.rows[i]) ? p.rows[i] : []);
+    });
+  }
+
+  // Safety check
+  if (!gs.players || !gs.players[0] || !gs.players[1] ||
+      !gs.players[0].rows.every(Array.isArray) ||
+      !gs.players[1].rows.every(Array.isArray)) {
+    return (
+      <div style={{minHeight:"100vh",background:"#060d18",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontSize:18,fontFamily:"Georgia,serif"}}>
+        ⏳ 同期中...
+      </div>
+    );
+  }
+
+  // Normalize gs.players rows before rendering
+  if (gs && gs.players) {
+    gs.players.forEach(p => {
+      if (!Array.isArray(p.rows)) p.rows = [[], [], []];
+      p.rows = [0,1,2].map(i => Array.isArray(p.rows[i]) ? p.rows[i] : []);
+    });
+  }
+  if (!gs.players || !gs.players[0] || !gs.players[1] ||
+      !gs.players[0].rows.every(r=>Array.isArray(r)) ||
+      !gs.players[1].rows.every(r=>Array.isArray(r))) {
+    return <div style={{minHeight:"100vh",background:"#060d18",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontSize:18}}>⏳ 同期中...</div>;
+  }
+
   const currentTurn = gs.turn;
   const myPlayerIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
   const opponentIdx = myPlayerIdx === 0 ? 1 : 0;
@@ -1885,7 +1917,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.44</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.46</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
