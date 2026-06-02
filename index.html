@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.15</title>
+  <title>OFC Pineapple Poker v1.16</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -986,83 +986,104 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   }
 
   // Confirm turn: commit draft to game state
-  function confirmTurn() {
-    if (!gs || !draft) return;
-    if (!gs || !gs.players) return;
-    const ng = JSON.parse(JSON.stringify(gs));
+  function sortRows(rows) {
+    return rows.map(row => {
+      if (!Array.isArray(row) || row.length === 0) return row || [];
+      const vals = row.map(c => isJoker(c) ? -1 : RANK_VAL[c.r]);
+      const counts = {};
+      for (const v of vals) if (v >= 0) counts[v] = (counts[v]||0)+1;
+      return [...row].sort((a, b) => {
+        const av = isJoker(a) ? -1 : RANK_VAL[a.r];
+        const bv = isJoker(b) ? -1 : RANK_VAL[b.r];
+        const ac = counts[av]||0, bc = counts[bv]||0;
+        if (bc !== ac) return bc - ac;
+        return bv - av;
+      });
+    });
+  }
+
+  function safeNg(ng) {
     if (!Array.isArray(ng.deck)) ng.deck = Object.values(ng.deck || {});
     if (!Array.isArray(ng.pineappleCards)) ng.pineappleCards = [null, null];
     if (!Array.isArray(ng.fantasyCards)) ng.fantasyCards = [null, null];
+    if (!Array.isArray(ng.playersDone)) ng.playersDone = [false, false];
     ng.players.forEach(p => {
       if (!Array.isArray(p.rows)) p.rows = [[], [], []];
       p.rows = p.rows.map(r => Array.isArray(r) ? r : []);
     });
+    return ng;
+  }
 
+  function confirmTurn() {
+    if (!gs || !draft) return;
+    if (!gs || !gs.players) return;
+    const ng = safeNg(JSON.parse(JSON.stringify(gs)));
     const p = ng.players[myPlayerIdx];
     const phase = ng.phase;
 
-    function sortRows(rows) {
-      return rows.map(row => {
-        if (row.length === 0) return row;
-        const vals = row.map(c => isJoker(c) ? -1 : RANK_VAL[c.r]);
-        const counts = {};
-        for (const v of vals) if (v >= 0) counts[v] = (counts[v]||0)+1;
-        return [...row].sort((a, b) => {
-          const av = isJoker(a) ? -1 : RANK_VAL[a.r];
-          const bv = isJoker(b) ? -1 : RANK_VAL[b.r];
-          const ac = counts[av]||0, bc = counts[bv]||0;
-          if (bc !== ac) return bc - ac;
-          return bv - av;
-        });
-      });
-    }
+    // Validate placed count
+    const baseForConfirm = baseRows || ng.players[myPlayerIdx].rows.map(r=>[...r]);
+    const placed = draft.rows.reduce((s,r,ri) => {
+      const nr = Array.isArray(r) ? r.length : 0;
+      const or = Array.isArray(baseForConfirm[ri]) ? baseForConfirm[ri].length : 0;
+      return s + nr - or;
+    }, 0);
 
     if (phase === "fantasyland") {
-      const totalPlaced = draft.rows.reduce((s,r)=>s+r.length,0);
-      if (totalPlaced !== 13) { alert("13枚すべて配置してください"); return; }
+      const total = draft.rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0);
+      if (total !== 13) { alert("13枚すべて配置してください"); return; }
       p.rows = sortRows(draft.rows);
       p.fantasyDone = true;
       ng.pineappleCards[myPlayerIdx] = draft.hand;
-      setDraft(null);
-      setSelectedHandIdx(null);
-      // Push my done state and check if both done
+      setDraft(null); setSelectedHandIdx(null); setBaseRows(null);
+      // FL: simultaneous - both must finish
+      ng.playersDone[myPlayerIdx] = true;
       pushToFirebase(ng);
-      checkBothDone(ng);
+      if (ng.playersDone[0] && ng.playersDone[1]) {
+        ng.playersDone = [false, false];
+        advanceGame(ng);
+      }
       return;
     }
 
-    const baseForConfirm = baseRows || (ng.players[myPlayerIdx] && Array.isArray(ng.players[myPlayerIdx].rows)
-      ? ng.players[myPlayerIdx].rows.map(r => Array.isArray(r) ? r : [])
-      : [[], [], []]);
-    const placed = draft.rows.reduce((s,r,ri) => s + (Array.isArray(r)?r.length:0) - (Array.isArray(baseForConfirm[ri])?baseForConfirm[ri].length:0), 0);
+    if (phase === "initial_place") {
+      if (placed < 5) { alert("5枚すべて配置してください"); return; }
+      p.rows = sortRows(draft.rows);
+      ng.pineappleCards[myPlayerIdx] = draft.hand;
+      ng.playersDone[myPlayerIdx] = true;
+      setDraft(null); setSelectedHandIdx(null); setBaseRows(null);
+      // Initial place: simultaneous - both must confirm
+      if (ng.playersDone[0] && ng.playersDone[1]) {
+        ng.playersDone = [false, false];
+        pushToFirebase(ng);
+        advanceGame(ng);
+      } else {
+        pushToFirebase(ng);
+      }
+      return;
+    }
 
-    if (phase === "initial_place" && placed < 5) { alert("5枚すべて配置してください"); return; }
-    if (phase === "pineapple" && placed < 2) { alert("2枚配置してください"); return; }
-    if (phase === "pineapple" && placed > 2) { alert("2枚だけ配置してください"); return; }
+    if (phase === "pineapple") {
+      if (placed < 2) { alert("2枚配置してください"); return; }
+      if (placed > 2) { alert("2枚だけ配置してください"); return; }
+      p.rows = sortRows(draft.rows);
+      ng.pineappleCards[myPlayerIdx] = draft.hand;
+      setDraft(null); setSelectedHandIdx(null); setBaseRows(null);
 
-    p.rows = sortRows(draft.rows);
-    ng.pineappleCards[myPlayerIdx] = draft.hand;
-    // Mark this player as done for this phase
-    if (!ng.playersDone) ng.playersDone = [false, false];
-    if (!Array.isArray(ng.playersDone)) ng.playersDone = [false, false];
-    ng.playersDone[myPlayerIdx] = true;
-
-    setDraft(null);
-    setSelectedHandIdx(null);
-    setBaseRows(null);
-    pushToFirebase(ng);
-    checkBothDone(ng);
+      // Pineapple: turn-based (P1 first, then P2 sees P1's board)
+      if (myPlayerIdx === ng.turn) {
+        // My turn done - switch to opponent
+        const nextTurn = ng.turn === 0 ? 1 : 0;
+        ng.turn = nextTurn;
+        ng.message = `Player ${nextTurn+1}のターン`;
+        pushToFirebase(ng);
+      } else {
+        // Both done - advance
+        ng.playersDone = [false, false];
+        advanceGame(ng);
+      }
+    }
   }
-
-  function checkBothDone(ng) {
-    if (!Array.isArray(ng.playersDone)) return;
-    const both = ng.playersDone[0] && ng.playersDone[1];
-    if (!both) return;
-    // Both confirmed - advance to next phase
-    ng.playersDone = [false, false];
-    advanceGame(ng);
-  }
-
 
   function countPlaced(newRows, origRows) {
     let count = 0;
@@ -1075,26 +1096,20 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   }
 
   function advanceGame(ng) {
-    // Simultaneous mode: called after both players confirm
-    if (!Array.isArray(ng.deck)) ng.deck = Object.values(ng.deck || {});
-    ng.players.forEach(p => {
-      if (!Array.isArray(p.rows)) p.rows = [[], [], []];
-      p.rows = p.rows.map(r => Array.isArray(r) ? r : []);
-    });
-
+    safeNg(ng);
     const phase = ng.phase;
 
     if (phase === "initial_place") {
-      // Both placed 5 - start pineapple for all
+      // Deal pineapple to both, P1 goes first
       const ng2 = dealPineapple(ng);
-      setGs(ng2);
-      pushToFirebase(ng2);
+      ng2.turn = 0;
+      ng2.message = "Player 1のターン";
+      setGs(ng2); pushToFirebase(ng2);
       return;
     }
 
     if (phase === "pineapple") {
-      // Check if all players have 13 cards
-      const allDone = ng.players.every(p => p.rows.reduce((s,r)=>s+r.length,0) === 13);
+      const allDone = ng.players.every(p => p.rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0) === 13);
       if (allDone) {
         const result = calcScore(ng);
         const newTs = [totalScores[0]+(result.pts0||0), totalScores[1]+(result.pts1||0)];
@@ -1105,16 +1120,16 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
         setGs(ng);
         pushToFirebase(ng, { ts: newTs, ss: result });
       } else {
-        // Deal next pineapple round
+        // More pineapple rounds - P1 goes first again
         const ng2 = dealPineapple(ng);
-        setGs(ng2);
-        pushToFirebase(ng2);
+        ng2.turn = 0;
+        ng2.message = "Player 1のターン";
+        setGs(ng2); pushToFirebase(ng2);
       }
       return;
     }
 
     if (phase === "fantasyland") {
-      // All FL players done - score
       const result = calcScore(ng);
       const newTs = [totalScores[0]+(result.pts0||0), totalScores[1]+(result.pts1||0)];
       setShowScore(result);
@@ -1268,7 +1283,11 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   }
 
   const currentTurn = gs.turn;
-  const isMyTurn = !gs.roundOver; // Simultaneous play - always your turn
+  const isMyTurn = !gs.roundOver && (
+    gs.phase === "initial_place" ||
+    gs.phase === "fantasyland" ||
+    (gs.phase === "pineapple" && gs.turn === myPlayerIdx)
+  );
   const opponentIdx = (mySlot !== null && mySlot !== undefined) ? (mySlot === 0 ? 1 : 0) : (currentTurn === 0 ? 1 : 0);
 
   // Build display player with draft rows
@@ -1330,8 +1349,8 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
         </div>
       </div>
 
-      {/* Opponent board */}
-      <div style={{marginBottom:8,opacity:0.75}}>
+      {/* Opponent board - always at top */}
+      <div style={{marginBottom:8,opacity:0.85}}>
         <PlayerBoard player={gs.players[opponentIdx]} playerIdx={opponentIdx}
           turn={currentTurn} isOpponent={true} onRowClick={()=>{}} selectedCard={null}
           onDropToRow={null} dragOverRow={null}/>
@@ -1788,7 +1807,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.15</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.16</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
