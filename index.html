@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.22</title>
+  <title>OFC Pineapple Poker v1.23</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -930,8 +930,10 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   // Place a card (works on draft)
   function placeCard(handIdx, rowIdx) {
     if (!gs) return;
-    if (!isMyTurn) return;
-    if (gs.phase !== "initial_place" && gs.phase !== "pineapple" && gs.phase !== "fantasyland") return;
+    const _p = String(gs.phase || "").trim();
+    const _canPlace = _p === "initial_place" || _p === "fantasyland" ||
+      (_p === "pineapple" && Number(gs.turn) === Number(mySlot !== null ? mySlot : 0));
+    if (!_canPlace || gs.roundOver) return;
 
     const d = activeDraft ? JSON.parse(JSON.stringify(activeDraft)) : initDraft();
     if (!d) return;
@@ -962,8 +964,10 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   // Remove a card from board back to hand (undo)
   function removeCardFromRow(rowIdx, cardIdx) {
     if (!gs) return;
-    if (!isMyTurn) return;
-    if (gs.phase !== "initial_place" && gs.phase !== "pineapple" && gs.phase !== "fantasyland") return;
+    const _p2 = String(gs.phase || "").trim();
+    const _canRemove = _p2 === "initial_place" || _p2 === "fantasyland" ||
+      (_p2 === "pineapple" && Number(gs.turn) === Number(mySlot !== null ? mySlot : 0));
+    if (!_canRemove || gs.roundOver) return;
     const d = activeDraft ? JSON.parse(JSON.stringify(activeDraft)) : initDraft();
     if (!d) return;
 
@@ -1516,7 +1520,11 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
               <div style={{textAlign:"center",marginTop:12}}>
                 <button
                   onClick={confirmTurn}
-                  disabled={!canConfirm || !isMyTurn}
+                  disabled={!canConfirm || gs.roundOver || (() => {
+                    const _pp = String(gs.phase||"").trim();
+                    return !(_pp==="initial_place"||_pp==="fantasyland"||
+                      (_pp==="pineapple"&&Number(gs.turn)===Number(mySlot!==null?mySlot:0)));
+                  })()}
                   style={{
                     background: canConfirm
                       ? "linear-gradient(135deg,#166534,#22c55e,#166534)"
@@ -1814,7 +1822,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.22</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.23</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
