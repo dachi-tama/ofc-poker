@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.14</title>
+  <title>OFC Pineapple Poker v1.15</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -863,15 +863,24 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   // Initialize draft for current turn
   function initDraft() {
     try {
-      if (!gs || !gs.players || gs.turn === undefined || gs.turn === null) return null;
-      const myIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : gs.turn;
+      if (!gs || !gs.players) return null;
+      const myIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : (gs.turn || 0);
       const p = gs.players[myIdx];
+      if (!p) return null;
+
+      // Ensure rows is always a proper 3-element array
+      function safeRows(rawRows) {
+        const arr = Array.isArray(rawRows) ? rawRows : Object.values(rawRows || {});
+        return [0, 1, 2].map(i => Array.isArray(arr[i]) ? [...arr[i]] : []);
+      }
+
+      const rows = safeRows(p.rows);
+
       // Snapshot base rows if not already set
       if (!baseRows) {
-        const snap = Array.isArray(p.rows) ? p.rows.map(r => Array.isArray(r) ? [...r] : []) : [[], [], []];
-        setBaseRows(snap);
+        setBaseRows(rows.map(r => [...r]));
       }
-      if (!p) return null;
+
       if (gs.phase === "fantasyland") {
         return {
           rows: [[], [], []],
@@ -879,14 +888,13 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
             ? [...gs.fantasyCards[myIdx]] : [],
         };
       }
-      const rows = p.rows && Array.isArray(p.rows) ? p.rows : [[], [], []];
-      const hand = gs.pineappleCards && Array.isArray(gs.pineappleCards) && gs.pineappleCards[myIdx]
-        ? gs.pineappleCards[myIdx] : [];
-      return {
-        rows: JSON.parse(JSON.stringify(rows)),
-        hand: [...hand],
-      };
+
+      const rawHand = gs.pineappleCards && gs.pineappleCards[myIdx];
+      const hand = Array.isArray(rawHand) ? rawHand : Object.values(rawHand || {});
+
+      return { rows, hand: [...hand] };
     } catch(e) {
+      console.error("initDraft error:", e);
       return { rows: [[], [], []], hand: [] };
     }
   }
@@ -925,6 +933,8 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 
     const d = activeDraft ? JSON.parse(JSON.stringify(activeDraft)) : initDraft();
     if (!d) return;
+    // Ensure all rows are arrays
+    d.rows = [0,1,2].map(i => Array.isArray(d.rows[i]) ? d.rows[i] : []);
 
     const card = d.hand[handIdx];
     if (!card) return;
@@ -1778,7 +1788,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.14</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.15</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
