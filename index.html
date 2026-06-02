@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.09</title>
+  <title>OFC Pineapple Poker v1.10</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -984,7 +984,10 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       return;
     }
 
-    const placedThisTurn = countPlaced(draft.rows, gs.players[ng.turn].rows);
+    const origPlayerRows = (gs.players[myPlayerIdx] && Array.isArray(gs.players[myPlayerIdx].rows))
+      ? gs.players[myPlayerIdx].rows.map(r => Array.isArray(r) ? r : [])
+      : [[], [], []];
+    const placedThisTurn = countPlaced(draft.rows, origPlayerRows);
     if (phase === "initial_place" && placedThisTurn < 5) { alert("5枚すべて配置してください"); return; }
     if (phase === "pineapple" && placedThisTurn < 2) { alert("2枚配置してください"); return; }
 
@@ -998,7 +1001,9 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   function countPlaced(newRows, origRows) {
     let count = 0;
     for (let r = 0; r < 3; r++) {
-      count += newRows[r].length - origRows[r].length;
+      const nr = Array.isArray(newRows[r]) ? newRows[r] : [];
+      const or = Array.isArray(origRows[r]) ? origRows[r] : [];
+      count += nr.length - or.length;
     }
     return count;
   }
@@ -1280,7 +1285,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   const placedThisTurn = draft
     ? (phase === "fantasyland"
         ? draft.rows.reduce((s,r)=>s+r.length,0)
-        : countPlaced(draft.rows, gs.players[currentTurn].rows))
+        : countPlaced(draft.rows, (gs.players[myPlayerIdx] && Array.isArray(gs.players[myPlayerIdx].rows)) ? gs.players[myPlayerIdx].rows : [[],[],[]]))
     : 0;
   const neededToPlace = phase === "initial_place" ? 5 : phase === "fantasyland" ? 13 : 2;
   const maxToPlace = neededToPlace;
@@ -1768,7 +1773,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.09</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.10</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
