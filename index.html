@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.31</title>
+  <title>OFC Pineapple Poker v1.33</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -151,7 +151,7 @@ function FaceArt({ rank, suit, color }) {
 }
 
 function isJoker(card) {
-  return card && (card.id === "JOKERr" || card.id === "JOKERb");
+  return card && (card.id === "JOKERr" || card.id === "JOKERb" || card.r === "JOKER");
 }
 
 function makeDeck() {
@@ -1172,7 +1172,21 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 
 
   function calcScore(ng) {
-    const [p0, p1] = ng.players;
+    // Normalize joker cards - ensure r:"JOKER" is set
+    function normalizeJokers(rows) {
+      return rows.map(row => Array.isArray(row) ? row.map(c => {
+        if (!c) return c;
+        if (c.id === "JOKERr" || c.id === "JOKERb" || c.r === "JOKER" ||
+            (c.s === "r" || c.s === "b") && !["♠","♥","♦","♣"].includes(c.s)) {
+          return { r: "JOKER", s: c.s || "r", id: c.id || "JOKERr" };
+        }
+        return c;
+      }) : row);
+    }
+    const p0rows = normalizeJokers(ng.players[0].rows);
+    const p1rows = normalizeJokers(ng.players[1].rows);
+    const p0 = { ...ng.players[0], rows: p0rows };
+    const p1 = { ...ng.players[1], rows: p1rows };
     const resolved0 = resolveJokers(p0.rows);
     const resolved1 = resolveJokers(p1.rows);
     const foul0 = isFoul(resolved0);
@@ -1848,7 +1862,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.31</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.33</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
