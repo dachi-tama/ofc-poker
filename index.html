@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.01</title>
+  <title>OFC Pineapple Poker v1.03</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -687,16 +687,23 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   // Apply remote state when received
   React.useEffect(() => {
     if (!remoteState) return;
-    if (remoteState.gs && remoteState.gs.players && remoteState.gs.players.length === 2) {
-      setGs(remoteState.gs);
-      setDraft(null);
-      setSelectedHandIdx(null);
+    try {
+      if (remoteState.gs && remoteState.gs.players &&
+          Array.isArray(remoteState.gs.players) &&
+          remoteState.gs.players.length === 2 &&
+          remoteState.gs.turn !== undefined) {
+        setGs(remoteState.gs);
+        setDraft(null);
+        setSelectedHandIdx(null);
+      }
+      if (remoteState.totalRounds !== undefined) setTotalRounds(remoteState.totalRounds);
+      if (remoteState.currentRound !== undefined) setCurrentRound(remoteState.currentRound);
+      if (Array.isArray(remoteState.totalScores)) setTotalScores(remoteState.totalScores);
+      if (remoteState.gameOver !== undefined) setGameOver(remoteState.gameOver);
+      setShowScore(remoteState.showScore || null);
+    } catch(e) {
+      console.error("State apply error:", e);
     }
-    if (remoteState.totalRounds !== undefined) setTotalRounds(remoteState.totalRounds);
-    if (remoteState.currentRound !== undefined) setCurrentRound(remoteState.currentRound);
-    if (remoteState.totalScores !== undefined) setTotalScores(remoteState.totalScores);
-    if (remoteState.gameOver !== undefined) setGameOver(remoteState.gameOver);
-    if (remoteState.showScore !== undefined) setShowScore(remoteState.showScore || null);
   }, [remoteState]);
 
   function pushToFirebase(newGs, extra) {
@@ -799,23 +806,31 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 
   // Initialize draft for current turn
   function initDraft() {
-    if (!gs) return null;
-    const p = gs.players[gs.turn];
-    if (gs.phase === "fantasyland") {
-      // FL: hand is the full fantasyCards deal, rows start empty
+    try {
+      if (!gs || !gs.players || gs.turn === undefined || gs.turn === null) return null;
+      const p = gs.players[gs.turn];
+      if (!p) return null;
+      if (gs.phase === "fantasyland") {
+        return {
+          rows: [[], [], []],
+          hand: Array.isArray(gs.fantasyCards) && gs.fantasyCards[gs.turn]
+            ? [...gs.fantasyCards[gs.turn]] : [],
+        };
+      }
+      const rows = p.rows && Array.isArray(p.rows) ? p.rows : [[], [], []];
+      const hand = gs.pineappleCards && Array.isArray(gs.pineappleCards) && gs.pineappleCards[gs.turn]
+        ? gs.pineappleCards[gs.turn] : [];
       return {
-        rows: [[], [], []],
-        hand: [...(gs.fantasyCards[gs.turn] || [])],
+        rows: JSON.parse(JSON.stringify(rows)),
+        hand: [...hand],
       };
+    } catch(e) {
+      return { rows: [[], [], []], hand: [] };
     }
-    return {
-      rows: JSON.parse(JSON.stringify(p.rows)),
-      hand: [...(gs.pineappleCards[gs.turn] || [])],
-    };
   }
 
   // Get current working state (draft if active, else from gs)
-  const activeDraft = draft || initDraft();
+  const activeDraft = draft || (gs ? initDraft() : null);
   const currentRows = activeDraft?.rows || [];
   const currentHand = activeDraft?.hand || [];
 
@@ -879,6 +894,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   // Confirm turn: commit draft to game state
   function confirmTurn() {
     if (!gs || !draft) return;
+    if (!gs || !gs.players) return;
     const ng = JSON.parse(JSON.stringify(gs));
     const p = ng.players[ng.turn];
     const phase = ng.phase;
@@ -1566,6 +1582,24 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 }
 
 
+// ── Firebase helpers ─────────────────────────────────────────────────────────
+// Firebase converts arrays to objects {0:x,1:y} - convert back
+function fixArrays(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== "object") return obj;
+  // Check if it looks like an array (keys are 0,1,2,...)
+  const keys = Object.keys(obj);
+  if (keys.length > 0 && keys.every(k => !isNaN(parseInt(k)))) {
+    const arr = [];
+    keys.forEach(k => arr[parseInt(k)] = fixArrays(obj[k]));
+    return arr;
+  }
+  // Recurse into object
+  const result = {};
+  for (const k of keys) result[k] = fixArrays(obj[k]);
+  return result;
+}
+
 // ── Firebase ──────────────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyCEbFunerjfcVmDMSw6cxxxCrdehI3H2e4",
@@ -1594,8 +1628,15 @@ function App() {
     if (screen !== "game" || !roomCode) return;
     const ref = db.ref("rooms/" + roomCode + "/gameState");
     ref.on("value", snap => {
-      const data = snap.val();
-      if (data) setRemoteState(data);
+      const raw = snap.val();
+      if (raw) {
+        try {
+          const data = fixArrays(raw);
+          setRemoteState(data);
+        } catch(e) {
+          console.error("Firebase parse error:", e);
+        }
+      }
     });
     return () => ref.off();
   }, [screen, roomCode]);
@@ -1652,7 +1693,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.01</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.03</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -1681,13 +1722,31 @@ function App() {
     </div>
   );
 
-  if (screen === "game") return (
-    <OFCGame
-      mySlot={mySlot}
-      onPushState={pushState}
-      remoteState={remoteState}
-    />
-  );
+  if (screen === "game") {
+    // Show loading until Firebase syncs a valid game state
+    const hasValidGs = remoteState && remoteState.gs &&
+      Array.isArray(remoteState.gs.players) &&
+      remoteState.gs.players.length === 2 &&
+      remoteState.gs.turn !== undefined;
+
+    // Player 1 (mySlot===0) needs to pick rounds first - show start screen via OFCGame
+    // Player 2 waits for Player 1 to push state
+    if (!hasValidGs && mySlot === 1) return (
+      <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0d2440,#060d18)",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontFamily:"Georgia,serif",flexDirection:"column",gap:16}}>
+        <div style={{fontSize:48}}>⏳</div>
+        <div style={{fontSize:18}}>ホストがゲームを開始するのを待っています...</div>
+        <div style={{fontSize:12,color:"rgba(255,215,0,0.4)"}}>合言葉: {roomCode}</div>
+      </div>
+    );
+
+    return (
+      <OFCGame
+        mySlot={mySlot}
+        onPushState={pushState}
+        remoteState={hasValidGs ? remoteState : null}
+      />
+    );
+  }
 
   return null;
 }
