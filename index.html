@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.06</title>
+  <title>OFC Pineapple Poker v1.07</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -419,10 +419,14 @@ function compareHands(a, b, rowLen) {
 }
 
 function isFoul(rows) {
-  const [top, mid, bot] = rows;
+  if (!rows || !Array.isArray(rows)) return false;
+  const top = Array.isArray(rows[0]) ? rows[0] : [];
+  const mid = Array.isArray(rows[1]) ? rows[1] : [];
+  const bot = Array.isArray(rows[2]) ? rows[2] : [];
   if (top.length!==3||mid.length!==5||bot.length!==5) return false;
-  // Resolve jokers before checking foul
-  const [rTop, rMid, rBot] = resolveJokers(rows);
+  const resolved = resolveJokers([top, mid, bot]);
+  if (resolved === null) return true;
+  const [rTop, rMid, rBot] = resolved;
   return compareHands(rBot,rMid,5)<0 || compareHands(rMid,rTop,3)<0;
 }
 
@@ -870,7 +874,12 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 
   // Get current working state (draft if active, else from gs)
   const activeDraft = draft || (gs ? initDraft() : null);
-  const currentRows = activeDraft?.rows || [];
+  const rawRows = activeDraft?.rows || [[], [], []];
+  const currentRows = [
+    Array.isArray(rawRows[0]) ? rawRows[0].filter(Boolean) : [],
+    Array.isArray(rawRows[1]) ? rawRows[1].filter(Boolean) : [],
+    Array.isArray(rawRows[2]) ? rawRows[2].filter(Boolean) : [],
+  ];
   const currentHand = activeDraft?.hand || [];
 
 
@@ -1753,7 +1762,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.06</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.07</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
