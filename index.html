@@ -690,9 +690,10 @@ function OFCGame({ roomCode, mySlot, db }) {
 
   // Push game state to Firebase
   function pushState(newGs, extra) {
-    if (!roomRef) return;
+    if (!db || !roomCode) return;
+    const ref = db.ref("rooms/" + roomCode + "/gameState");
     setSyncing(true);
-    roomRef.set({
+    ref.set({
       gs: newGs,
       totalRounds: (extra && extra.tr !== undefined) ? extra.tr : totalRounds,
       currentRound: (extra && extra.cr !== undefined) ? extra.cr : currentRound,
@@ -704,25 +705,27 @@ function OFCGame({ roomCode, mySlot, db }) {
 
   // Sync FROM Firebase
   React.useEffect(() => {
-    if (!roomRef) return;
+    if (!db || !roomCode) return;
+    const ref = db.ref("rooms/" + roomCode + "/gameState");
     const handler = snap => {
       const data = snap.val();
       if (!data) return;
-      // Only update gs if it's a complete valid state
-      if (data.gs && data.gs.players && data.gs.players.length === 2 && data.gs.turn !== undefined) {
-        setGs(data.gs);
-        setDraft(null);
-        setSelectedHandIdx(null);
-      }
+      // Update totalRounds etc first so loading screen updates
       if (data.totalRounds !== undefined) setTotalRounds(data.totalRounds);
       if (data.currentRound !== undefined) setCurrentRound(data.currentRound);
       if (data.totalScores !== undefined) setTotalScores(data.totalScores);
       if (data.gameOver !== undefined) setGameOver(data.gameOver);
       setShowScore(data.showScore || null);
+      // Update gs if valid
+      if (data.gs && data.gs.players && data.gs.players.length === 2 && data.gs.turn !== undefined) {
+        setGs(data.gs);
+        setDraft(null);
+        setSelectedHandIdx(null);
+      }
     };
-    roomRef.on("value", handler);
-    return () => roomRef.off("value", handler);
-  }, [roomCode]);
+    ref.on("value", handler);
+    return () => ref.off("value", handler);
+  }, [roomCode, db]);
 
   function startGame(rounds) {
     setTotalRounds(rounds);
