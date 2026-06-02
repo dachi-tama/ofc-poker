@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.10</title>
+  <title>OFC Pineapple Poker v1.11</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -735,7 +735,9 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       if (remoteState.currentRound !== undefined) setCurrentRound(remoteState.currentRound);
       const ts = remoteState.totalScores;
       if (ts) setTotalScores(Array.isArray(ts) ? ts : [ts[0]||0, ts[1]||0]);
-      if (remoteState.gameOver !== undefined) setGameOver(remoteState.gameOver);
+      if (remoteState.gameOver !== undefined) {
+        setGameOver(remoteState.gameOver);
+      }
       setShowScore(remoteState.showScore || null);
     } catch(e) {
       console.error("State apply error:", e);
@@ -773,6 +775,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
   function startNextRound(newTotals, nextFL) {
     if (currentRound >= totalRounds) {
       setGameOver(true);
+      pushToFirebase(gs, { go: true });
       return;
     }
     setCurrentRound(r => r + 1);
@@ -917,6 +920,12 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
     setDraft(d);
     setSelectedHandIdx(null);
     setDragCardIdx(null);
+    // Push draft rows so opponent can see placement in real-time
+    if (gs) {
+      const draftGs = JSON.parse(JSON.stringify(gs));
+      draftGs.players[myPlayerIdx].rows = d.rows;
+      pushToFirebase(draftGs);
+    }
   }
 
   // Remove a card from board back to hand (undo)
@@ -935,11 +944,16 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
     if (cardIdx < origLen) return; // can't remove pre-existing card
 
     d.rows[rowIdx] = d.rows[rowIdx].filter((_,i)=>i!==cardIdx);
-    // Find first null slot in hand to return card
     const nullIdx = d.hand.findIndex(c=>c===null);
     if (nullIdx >= 0) d.hand[nullIdx] = card;
     else d.hand.push(card);
     setDraft(d);
+    // Push draft rows so opponent can see in real-time
+    if (gs) {
+      const draftGs = JSON.parse(JSON.stringify(gs));
+      draftGs.players[myPlayerIdx].rows = d.rows;
+      pushToFirebase(draftGs);
+    }
   }
 
   // Confirm turn: commit draft to game state
@@ -1612,13 +1626,25 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
             )}
 
             {currentRound < totalRounds ? (
-              <button onClick={()=>startNextRound(totalScores, showScore?.nextFL || [{active:false,cardCount:0},{active:false,cardCount:0}])} style={{background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",color:"#0d1a2e",border:"none",borderRadius:10,padding:"11px 32px",fontSize:15,fontWeight:700,cursor:"pointer",letterSpacing:1,fontFamily:"'Playfair Display',serif"}}>
-                次のラウンド ({currentRound+1}/{totalRounds}) →
-              </button>
+              myPlayerIdx === 0 ? (
+                <button onClick={()=>startNextRound(totalScores, showScore?.nextFL || [{active:false,cardCount:0},{active:false,cardCount:0}])} style={{background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",color:"#0d1a2e",border:"none",borderRadius:10,padding:"11px 32px",fontSize:15,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
+                  次のラウンド ({currentRound+1}/{totalRounds}) →
+                </button>
+              ) : (
+                <div style={{color:"rgba(255,255,255,0.4)",fontSize:13,textAlign:"center",padding:8}}>
+                  ⏳ ホストが次のラウンドを開始するのを待っています...
+                </div>
+              )
             ) : (
-              <button onClick={()=>setGameOver(true)} style={{background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"white",border:"none",borderRadius:10,padding:"11px 32px",fontSize:15,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
-                最終結果を見る 🏆
-              </button>
+              myPlayerIdx === 0 ? (
+                <button onClick={()=>{ setGameOver(true); pushToFirebase(gs, { go: true }); }} style={{background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"white",border:"none",borderRadius:10,padding:"11px 32px",fontSize:15,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
+                  最終結果を見る 🏆
+                </button>
+              ) : (
+                <div style={{color:"rgba(255,255,255,0.4)",fontSize:13,textAlign:"center",padding:8}}>
+                  ⏳ ホストが最終結果を確認しています...
+                </div>
+              )
             )}
           </div>
         </div>
@@ -1773,7 +1799,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.10</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.11</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
