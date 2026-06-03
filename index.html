@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="cache-bust" content="v1.51-2026">
+  <meta name="cache-bust" content="v1.53-2026">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.51</title>
+  <title>OFC Pineapple Poker v1.53</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -743,6 +743,11 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
             const totalNewCards = newRows.reduce((s,r)=>s+r.length,0);
 
             const phaseChanged = !prev || prev.phase !== fixedGs.phase || prev.roundOver !== fixedGs.roundOver;
+            // In FL, don't reset draft when only playersDone changes (partner confirmed)
+            const onlyDoneChanged = prev && prev.phase === fixedGs.phase &&
+              prev.roundOver === fixedGs.roundOver &&
+              prev.turn === fixedGs.turn &&
+              JSON.stringify(prev.playersDone) !== JSON.stringify(fixedGs.playersDone);
             const prevTotal = prev ? (prev.players && prev.players[myIdx2] ?
               prev.players[myIdx2].rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0) : 0) : 999;
             const newRound = totalNewCards < prevTotal;
@@ -763,7 +768,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
             const baseTotal = baseRows ? baseRows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0) : 0;
             const baseStale = baseTotal > totalNewCards;
 
-            if (phaseChanged || newRound || myTurnStarting || baseStale || newCardsDealt) {
+            if ((phaseChanged || newRound || myTurnStarting || baseStale || newCardsDealt) && !onlyDoneChanged) {
               setDraft(null);
               setSelectedHandIdx(null);
               setBaseRows(newRows);
@@ -1311,12 +1316,14 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
     const p1WasFL = ng.players[1].inFantasyland;
     const fl0continue = p0WasFL && !foul0 && checkFantasylandContinue(resolved0);
     const fl1continue = p1WasFL && !foul1 && checkFantasylandContinue(resolved1);
-    const next0 = fl0continue
-      ? { active: true, cardCount: ng.players[0].fantasyCardCount }
-      : fl0info.enters ? { active: true, cardCount: fl0info.cardCount } : { active: false, cardCount: 0 };
-    const next1 = fl1continue
-      ? { active: true, cardCount: ng.players[1].fantasyCardCount }
-      : fl1info.enters ? { active: true, cardCount: fl1info.cardCount } : { active: false, cardCount: 0 };
+    // If player WAS in FL: only continue if continue conditions met (no new entry)
+    // If player was NOT in FL: can enter FL next round via normal entry conditions
+    const next0 = p0WasFL
+      ? (fl0continue ? { active: true, cardCount: ng.players[0].fantasyCardCount } : { active: false, cardCount: 0 })
+      : (fl0info.enters ? { active: true, cardCount: fl0info.cardCount } : { active: false, cardCount: 0 });
+    const next1 = p1WasFL
+      ? (fl1continue ? { active: true, cardCount: ng.players[1].fantasyCardCount } : { active: false, cardCount: 0 })
+      : (fl1info.enters ? { active: true, cardCount: fl1info.cardCount } : { active: false, cardCount: 0 });
 
     return {
       pts0, pts1, foul0, foul1, results,
@@ -1327,14 +1334,12 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       fantasylandContinue0: fl0continue,
       fantasylandContinue1: fl1continue,
       nextFL: [next0, next1],
-      hands0: p0.rows.map(row => {
-        const dispResolved = resolveJokersInRow(row);
-        const h = evalHandRaw(dispResolved);
+      hands0: (resolved0 || p0.rows).map(row => {
+        const h = evalHand(row);
         return h.rank >= 0 ? h : {rank:0, name:"ハイカード"};
       }),
-      hands1: p1.rows.map(row => {
-        const dispResolved = resolveJokersInRow(row);
-        const h = evalHandRaw(dispResolved);
+      hands1: (resolved1 || p1.rows).map(row => {
+        const h = evalHand(row);
         return h.rank >= 0 ? h : {rank:0, name:"ハイカード"};
       }),
     };
@@ -1927,7 +1932,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.51</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.53</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
