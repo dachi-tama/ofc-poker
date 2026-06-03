@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="cache-bust" content="v1.57-2026">
+  <meta name="cache-bust" content="v1.58-2026">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.57</title>
+  <title>OFC Pineapple Poker v1.58</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -503,6 +503,7 @@ function initGameState(prevFantasyland) {
     deckIdx: 0,
     phase: "deal",
     turn: 0,
+    buttonPlayer: 0, // stored in gs for Firebase sync
     players: [
       { rows: [[], [], []], inFantasyland: fl0.active, fantasyCardCount: fl0.cardCount, fantasyDone: false },
       { rows: [[], [], []], inFantasyland: fl1.active, fantasyCardCount: fl1.cardCount, fantasyDone: false },
@@ -742,7 +743,10 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
           if (!Array.isArray(fixedGs.fantasyCards)) fixedGs.fantasyCards = [null, null];
           if (!Array.isArray(fixedGs.deck)) fixedGs.deck = [];
           setGs(prev => {
-            // Reset draft when phase changes or round ends
+            // Sync buttonPlayer from gs
+            if (fixedGs.buttonPlayer !== undefined) {
+              setButtonPlayer(Number(fixedGs.buttonPlayer));
+            }
             // Reset when phase, round, or player rows change significantly
             const myIdx2 = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
             const newRows = fixedGs.players && fixedGs.players[myIdx2] && Array.isArray(fixedGs.players[myIdx2].rows)
@@ -798,10 +802,7 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
       if (remoteState.currentRound !== undefined) setCurrentRound(remoteState.currentRound);
       const ts = remoteState.totalScores;
       if (ts) setTotalScores(Array.isArray(ts) ? ts : [ts[0]||0, ts[1]||0]);
-      // Only update buttonPlayer when a new round starts (btn explicitly sent)
-      if (remoteState.btn !== undefined && remoteState.btn !== null) {
-        setButtonPlayer(Number(remoteState.btn));
-      }
+      // buttonPlayer is now synced via gs.buttonPlayer in setGs callback
       if (remoteState.gameOver !== undefined) {
         setGameOver(remoteState.gameOver);
       }
@@ -829,6 +830,7 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
     setTotalScores([0, 0]);
     setGameOver(false);
     const g = initGameState(null);
+    g.buttonPlayer = 0;
     const newGs = dealInitial(g);
     setGs(newGs);
     setDraft(null);
@@ -837,7 +839,7 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
     setDragCardIdx(null);
     setShowScore(null);
     setButtonPlayer(0);
-    pushToFirebase(newGs, { tr: rounds, cr: 1, ts: [0,0], go: false, ss: null, btn: 0 });
+    pushToFirebase(newGs, { tr: rounds, cr: 1, ts: [0,0], go: false, ss: null });
   }
 
   function startNextRound(newTotals, nextFL) {
@@ -850,6 +852,7 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
     setCurrentRound(nextRound);
     setTotalScores(newTotals);
     const g = initGameState(nextFL);
+    g.buttonPlayer = nextBtn;
     const newGs = dealInitial(g);
     setGs(newGs);
     setDraft(null);
@@ -860,7 +863,7 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
     // Push immediately so guest screen updates
     const nextBtn = 1 - buttonPlayer;
     setButtonPlayer(nextBtn);
-    pushToFirebase(newGs, { tr: totalRounds, cr: nextRound, ts: newTotals, go: false, ss: null, btn: nextBtn });
+    pushToFirebase(newGs, { tr: totalRounds, cr: nextRound, ts: newTotals, go: false, ss: null });
   }
 
   function dealInitial(g) {
@@ -1147,6 +1150,7 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
           ng.pineappleCards[myPlayerIdx] = ng.deck.slice(didx, didx+3);
           ng.deckIdx = didx + 3;
           ng.phase = "pineapple_mixed"; // special phase for mixed round
+          ng.buttonPlayer = ng.buttonPlayer !== undefined ? ng.buttonPlayer : 0;
           ng.turn = myPlayerIdx;
           pushToFirebase(ng);
         } else {
@@ -1201,13 +1205,16 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
       }
 
       // Normal pineapple: turn-based 先攻->後攻->advance
-      const senkoPlayer = 1 - buttonPlayer;
-      const kokoPlayer = buttonPlayer;
+      const btn3 = ng.buttonPlayer !== undefined ? ng.buttonPlayer : 0;
+      const senkoPlayer = 1 - btn3;
+      const kokoPlayer = btn3;
       if (Number(ng.turn) === senkoPlayer) {
+        // 先攻 confirmed → switch to 後攻
         ng.turn = kokoPlayer;
         ng.message = `Player ${kokoPlayer+1}のターン（後攻）`;
         pushToFirebase(ng);
       } else {
+        // 後攻 confirmed → advance
         ng.playersDone = [false, false];
         advanceGame(ng);
       }
@@ -1231,7 +1238,9 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
     if (phase === "initial_place") {
       // Deal pineapple to both, P1 goes first
       const ng2 = dealPineapple(ng);
-      const firstTurn = 1 - buttonPlayer; // 先攻 = non-button player
+      const btn = ng.buttonPlayer !== undefined ? ng.buttonPlayer : 0;
+      ng2.buttonPlayer = btn; // carry forward
+      const firstTurn = 1 - btn; // 先攻 = non-button player
       ng2.turn = firstTurn;
       ng2.message = `Player ${firstTurn+1}のターン（先攻）`;
       setGs(ng2); pushToFirebase(ng2);
@@ -1250,10 +1259,13 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
         setGs(ng);
         pushToFirebase(ng, { ts: newTs, ss: result });
       } else {
-        // More pineapple rounds - P1 goes first again
+        // More pineapple rounds - 先攻 goes first
         const ng2 = dealPineapple(ng);
-        ng2.turn = 0;
-        ng2.message = "Player 1のターン";
+        const btn2 = ng.buttonPlayer !== undefined ? ng.buttonPlayer : 0;
+        ng2.buttonPlayer = btn2;
+        const firstTurn2 = 1 - btn2;
+        ng2.turn = firstTurn2;
+        ng2.message = `Player ${firstTurn2+1}のターン（先攻）`;
         setGs(ng2); pushToFirebase(ng2);
       }
       return;
@@ -1972,7 +1984,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.57</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.58</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <input
           value={playerName}
