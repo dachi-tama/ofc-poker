@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="cache-bust" content="v1.70-2026">
+  <meta name="cache-bust" content="v1.72-2026">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.70</title>
+  <title>OFC Pineapple Poker v1.72</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -1425,93 +1425,6 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
   // ── Render ────────────────────────────────────────────────────────────────
 
 
-  if (!gs) return (
-    <div style={{
-      minHeight:"100vh",
-      background:"radial-gradient(ellipse at 50% 0%, #0d2440 0%, #060d18 70%)",
-      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
-      fontFamily:"'Crimson Text', Georgia, serif",
-      color:"#e8dcc8",
-    }}>
-      <div style={{textAlign:"center",maxWidth:480,padding:32}}>
-        <div style={{fontSize:56,marginBottom:8}}>🃏</div>
-        <h1 style={{
-          fontFamily:"'Playfair Display', 'Times New Roman', serif",
-          fontSize:42,margin:"0 0 8px",
-          background:"linear-gradient(135deg,#ffd700,#ffb300,#ffd700)",
-          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
-          letterSpacing:2,
-        }}>OFC Pineapple</h1>
-        <p style={{color:"rgba(232,220,200,0.6)",fontSize:16,marginBottom:8}}>Open Face Chinese Poker</p>
-        <p style={{color:"rgba(232,220,200,0.4)",fontSize:13,marginBottom:32,lineHeight:1.6}}>
-          Pineappleルール対応 / Fantasyland付き<br/>
-          同じ画面で2人プレイ
-        </p>
-        <div style={{
-          background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
-          borderRadius:12,padding:16,marginBottom:28,textAlign:"left",fontSize:13,lineHeight:1.8,
-          color:"rgba(232,220,200,0.7)"
-        }}>
-          <b style={{color:"#ffd700"}}>遊び方：</b><br/>
-          1. 手札カードをドラッグ→スロットへドロップ（またはタップ選択→列タップ）<br/>
-          2. ボードのカードをタップで手札に戻せます（置き直しOK）<br/>
-          3. ✔ 確定ボタンを押してターン終了<br/>
-          4. Bot ≥ Mid ≥ Top になるよう配置
-        </div>
-        <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
-          {[5,10,20].map(n=>(
-            <button key={n} onClick={()=>startGame(n)} style={{
-              background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",
-              color:"#0d1a2e",border:"none",borderRadius:10,
-              padding:"12px 28px",fontSize:16,fontWeight:700,
-              cursor:"pointer",letterSpacing:1,
-              fontFamily:"'Playfair Display',serif",
-              boxShadow:"0 4px 24px rgba(255,215,0,0.3)",
-            }}>{n}ラウンド</button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  // Normalize gs.players rows before rendering
-  if (gs && gs.players) {
-    gs.players.forEach(p => {
-      if (!Array.isArray(p.rows)) p.rows = [[], [], []];
-      p.rows = [0,1,2].map(i => Array.isArray(p.rows[i]) ? p.rows[i] : []);
-    });
-  }
-
-  // Safety check
-  if (!gs.players || !gs.players[0] || !gs.players[1] ||
-      !gs.players[0].rows.every(Array.isArray) ||
-      !gs.players[1].rows.every(Array.isArray)) {
-    return (
-      <div style={{minHeight:"100vh",background:"#060d18",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontSize:18,fontFamily:"Georgia,serif"}}>
-        ⏳ 同期中...
-      </div>
-    );
-  }
-
-  // Normalize gs.players rows before rendering
-  if (gs && gs.players) {
-    gs.players.forEach(p => {
-      if (!Array.isArray(p.rows)) p.rows = [[], [], []];
-      p.rows = [0,1,2].map(i => Array.isArray(p.rows[i]) ? p.rows[i] : []);
-    });
-  }
-  if (!gs.players || !gs.players[0] || !gs.players[1] ||
-      !gs.players[0].rows.every(r=>Array.isArray(r)) ||
-      !gs.players[1].rows.every(r=>Array.isArray(r))) {
-    return <div style={{minHeight:"100vh",background:"#060d18",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontSize:18}}>⏳ 同期中...</div>;
-  }
-
-  const currentTurn = gs.turn;
-  const myPlayerIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
-  const effectiveBtn = Number(gs.buttonPlayer !== undefined ? gs.buttonPlayer : 0);
-  const iAmButton = effectiveBtn === myPlayerIdx;
-  const opponentIsButton = effectiveBtn !== myPlayerIdx;
-
   // ── Card Flip Screen ──────────────────────────────────────────────────────
   if (flipState && !gs) {
     const { card0, card1, winner, rounds } = flipState;
@@ -2093,7 +2006,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.70</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.72</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <input
           value={playerName}
@@ -2161,4 +2074,93 @@ function App() {
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
 </body>
-</html>
+</html
+
+  if (!gs && mySlot === 0) return (
+    <div style={{
+      minHeight:"100vh",
+      background:"radial-gradient(ellipse at 50% 0%, #0d2440 0%, #060d18 70%)",
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+      fontFamily:"'Crimson Text', Georgia, serif",
+      color:"#e8dcc8",
+    }}>
+      <div style={{textAlign:"center",maxWidth:480,padding:32}}>
+        <div style={{fontSize:56,marginBottom:8}}>🃏</div>
+        <h1 style={{
+          fontFamily:"'Playfair Display', 'Times New Roman', serif",
+          fontSize:42,margin:"0 0 8px",
+          background:"linear-gradient(135deg,#ffd700,#ffb300,#ffd700)",
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
+          letterSpacing:2,
+        }}>OFC Pineapple</h1>
+        <p style={{color:"rgba(232,220,200,0.6)",fontSize:16,marginBottom:8}}>Open Face Chinese Poker</p>
+        <p style={{color:"rgba(232,220,200,0.4)",fontSize:13,marginBottom:32,lineHeight:1.6}}>
+          Pineappleルール対応 / Fantasyland付き<br/>
+          同じ画面で2人プレイ
+        </p>
+        <div style={{
+          background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+          borderRadius:12,padding:16,marginBottom:28,textAlign:"left",fontSize:13,lineHeight:1.8,
+          color:"rgba(232,220,200,0.7)"
+        }}>
+          <b style={{color:"#ffd700"}}>遊び方：</b><br/>
+          1. 手札カードをドラッグ→スロットへドロップ（またはタップ選択→列タップ）<br/>
+          2. ボードのカードをタップで手札に戻せます（置き直しOK）<br/>
+          3. ✔ 確定ボタンを押してターン終了<br/>
+          4. Bot ≥ Mid ≥ Top になるよう配置
+        </div>
+        <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+          {[5,10,20].map(n=>(
+            <button key={n} onClick={()=>startGame(n)} style={{
+              background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",
+              color:"#0d1a2e",border:"none",borderRadius:10,
+              padding:"12px 28px",fontSize:16,fontWeight:700,
+              cursor:"pointer",letterSpacing:1,
+              fontFamily:"'Playfair Display',serif",
+              boxShadow:"0 4px 24px rgba(255,215,0,0.3)",
+            }}>{n}ラウンド</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Normalize gs.players rows before rendering
+  if (gs && gs.players) {
+    gs.players.forEach(p => {
+      if (!Array.isArray(p.rows)) p.rows = [[], [], []];
+      p.rows = [0,1,2].map(i => Array.isArray(p.rows[i]) ? p.rows[i] : []);
+    });
+  }
+
+  // Safety check
+  if (!gs.players || !gs.players[0] || !gs.players[1] ||
+      !gs.players[0].rows.every(Array.isArray) ||
+      !gs.players[1].rows.every(Array.isArray)) {
+    return (
+      <div style={{minHeight:"100vh",background:"#060d18",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontSize:18,fontFamily:"Georgia,serif"}}>
+        ⏳ 同期中...
+      </div>
+    );
+  }
+
+  // Normalize gs.players rows before rendering
+  if (gs && gs.players) {
+    gs.players.forEach(p => {
+      if (!Array.isArray(p.rows)) p.rows = [[], [], []];
+      p.rows = [0,1,2].map(i => Array.isArray(p.rows[i]) ? p.rows[i] : []);
+    });
+  }
+  if (!gs.players || !gs.players[0] || !gs.players[1] ||
+      !gs.players[0].rows.every(r=>Array.isArray(r)) ||
+      !gs.players[1].rows.every(r=>Array.isArray(r))) {
+    return <div style={{minHeight:"100vh",background:"#060d18",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontSize:18}}>⏳ 同期中...</div>;
+  }
+
+  const currentTurn = gs.turn;
+  const myPlayerIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
+  const effectiveBtn = Number(gs.buttonPlayer !== undefined ? gs.buttonPlayer : 0);
+  const iAmButton = effectiveBtn === myPlayerIdx;
+  const opponentIsButton = effectiveBtn !== myPlayerIdx;
+
+>
