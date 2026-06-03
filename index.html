@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="cache-bust" content="v1.50-2026">
+  <meta name="cache-bust" content="v1.51-2026">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.50</title>
+  <title>OFC Pineapple Poker v1.51</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -923,6 +923,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
         return {
           rows: [[], [], []],
           hand: [...flHand],
+          base: [[], [], []],
         };
       }
 
@@ -930,10 +931,10 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       const hand = Array.isArray(rawHand) ? rawHand : 
                    (rawHand && typeof rawHand === 'object') ? Object.values(rawHand) : [];
 
-      return { rows, hand: [...hand] };
+      return { rows, hand: [...hand], base: rows.map(r => [...r]) };
     } catch(e) {
       console.error("initDraft error:", e);
-      return { rows: [[], [], []], hand: [] };
+      return { rows: [[], [], []], hand: [], base: [[], [], []] };
     }
   }
 
@@ -1017,8 +1018,9 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 
     const card = d.rows[rowIdx][cardIdx];
     // Use baseRows to determine which cards were pre-existing
-    const baseRow = baseRows && Array.isArray(baseRows[rowIdx]) ? baseRows[rowIdx] : [];
-    // FL player starts with empty rows, so all placed cards are removable
+    const baseRow = (activeDraft?.base && Array.isArray(activeDraft.base[rowIdx])) 
+      ? activeDraft.base[rowIdx] 
+      : (baseRows && Array.isArray(baseRows[rowIdx]) ? baseRows[rowIdx] : []);
     const origLen = (gs.phase === "fantasyland" || _imFL3) ? 0 : baseRow.length;
     if (cardIdx < origLen) return; // can't remove pre-existing card
 
@@ -1075,7 +1077,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
     const phase = ng.phase;
 
     // Validate placed count
-    const baseForConfirm = baseRows || ng.players[myPlayerIdx].rows.map(r=>[...r]);
+    const baseForConfirm = draft.base || baseRows || [[], [], []];
     const placed = draft.rows.reduce((s,r,ri) => {
       const nr = Array.isArray(r) ? r.length : 0;
       const or = Array.isArray(baseForConfirm[ri]) ? baseForConfirm[ri].length : 0;
@@ -1450,14 +1452,10 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
 
   // Count how many placed this turn
   const myIsFL2 = gs.players && gs.players[myPlayerIdx] && gs.players[myPlayerIdx].inFantasyland;
-  // For initial_place, base is always empty rows (start of round)
-  // For pineapple, use baseRows snapshot (set when turn starts)
-  // Never use current gs.players.rows as base (might have stale Firebase data)
-  const effectiveBase = baseRows || [[], [], []];
   const placedThisTurn = draft
     ? (myIsFL2 || phase === "fantasyland"
         ? draft.rows.reduce((s,r)=>s+(Array.isArray(r)?r.length:0),0)
-        : countPlaced(draft.rows, effectiveBase))
+        : countPlaced(draft.rows, draft.base || baseRows || [[], [], []]))
     : 0;
   const neededToPlace = (myIsFL2 || phase === "fantasyland") ? 13 : phase === "initial_place" ? 5 : 2;
   const maxToPlace = neededToPlace;
@@ -1582,7 +1580,9 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
             {[["TOP",3,0],["MID",5,1],["BOT",5,2]].map(([label,cap,ri])=>{
               const cards = currentRows[ri] || [];
               const origLen = (gs.phase === "fantasyland" || myIsFL2) ? 0
-                : (baseRows && Array.isArray(baseRows[ri]) ? baseRows[ri].length : 0);
+                : (activeDraft && activeDraft.base && Array.isArray(activeDraft.base[ri]) 
+                   ? activeDraft.base[ri].length 
+                   : (baseRows && Array.isArray(baseRows[ri]) ? baseRows[ri].length : 0));
               return (
                 <div key={ri} style={{marginBottom:10}}>
                   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
@@ -1927,7 +1927,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.50</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.51</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
