@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="cache-bust" content="v1.54-2026">
+  <meta name="cache-bust" content="v1.55-2026">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.54</title>
+  <title>OFC Pineapple Poker v1.55</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -614,7 +614,7 @@ function RowSlot({ label, capacity, cards, highlight, onSlotClick, onDrop, evalI
   );
 }
 
-function PlayerBoard({ player, playerIdx, turn, onRowClick, selectedCard, isOpponent, onDropToRow, dragOverRow }) {
+function PlayerBoard({ player, playerIdx, turn, onRowClick, selectedCard, isOpponent, onDropToRow, dragOverRow, opponentName }) {
   if (!player) return null;
   const rawPlayerRows = Array.isArray(player.rows) ? player.rows : [];
   const top = Array.isArray(rawPlayerRows[0]) ? rawPlayerRows[0] : [];
@@ -639,7 +639,7 @@ function PlayerBoard({ player, playerIdx, turn, onRowClick, selectedCard, isOppo
           color: isOpponent?"rgba(255,255,255,0.5)":"#ffd700",
           letterSpacing:1,
         }}>
-          {isOpponent ? `Player ${playerIdx+1}` : `▶ Player ${playerIdx+1} (あなた)`}
+          {isOpponent ? (opponentName || `Player ${playerIdx+1}`) : `▶ Player ${playerIdx+1} (あなた)`}
         </span>
         {player.inFantasyland && (
           <span style={{background:"linear-gradient(90deg,#7c3aed,#a855f7)",
@@ -677,7 +677,7 @@ function PlayerBoard({ player, playerIdx, turn, onRowClick, selectedCard, isOppo
 }
 
 // ── Main Game ──────────────────────────────────────────────────────────────
-function OFCGame({ mySlot, onPushState, remoteState }) {
+function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName }) {
   const [gs, setGs] = React.useState(null);
   // Draft state: cards tentatively placed this turn (before confirm)
   // draftRows: player's rows with draft placements
@@ -1514,7 +1514,7 @@ function OFCGame({ mySlot, onPushState, remoteState }) {
       <div style={{marginBottom:8,opacity:0.75}}>
         <PlayerBoard player={gs.players[opponentIdx]} playerIdx={opponentIdx}
           turn={currentTurn} isOpponent={true} onRowClick={()=>{}} selectedCard={null}
-          onDropToRow={null} dragOverRow={null}/>
+          onDropToRow={null} dragOverRow={null} opponentName={opponentName}/>
       </div>
 
       {/* Hand */}
@@ -1872,11 +1872,13 @@ const db = firebase.database();
 
 function App() {
   const [screen, setScreen] = React.useState("lobby");
+  const [playerName, setPlayerName] = React.useState("");
   const [roomCode, setRoomCode] = React.useState("");
   const [inputCode, setInputCode] = React.useState("");
   const [mySlot, setMySlot] = React.useState(null);
   const [error, setError] = React.useState("");
   const [opponentReady, setOpponentReady] = React.useState(false);
+  const [opponentName, setOpponentName] = React.useState("");
   const [remoteState, setRemoteState] = React.useState(null);
 
   React.useEffect(() => {
@@ -1905,26 +1907,34 @@ function App() {
   }
 
   async function createRoom() {
+    if (!playerName.trim()) { setError("プレイヤー名を入力してください"); return; }
     const code = generateCode();
     const ref = db.ref("rooms/" + code);
     const snap = await ref.once("value");
     if (snap.exists()) { createRoom(); return; }
-    await ref.set({ status: "waiting", createdAt: Date.now() });
+    await ref.set({ status: "waiting", createdAt: Date.now(), name0: playerName.trim() });
     setRoomCode(code);
     setMySlot(0);
     setScreen("waiting");
     ref.child("player1").on("value", s => {
       if (s.val() === "ready") setOpponentReady(true);
     });
+    ref.child("name1").on("value", s => {
+      if (s.val()) setOpponentName(s.val());
+    });
   }
 
   async function joinRoom() {
+    if (!playerName.trim()) { setError("プレイヤー名を入力してください"); return; }
     const code = inputCode.toUpperCase().trim();
     if (code.length !== 4) { setError("4文字のコードを入力してください"); return; }
     const ref = db.ref("rooms/" + code);
     const snap = await ref.once("value");
     if (!snap.exists()) { setError("ルームが見つかりません"); return; }
     await ref.child("player1").set("ready");
+    await ref.child("name1").set(playerName.trim());
+    const roomData = snap.val();
+    if (roomData.name0) setOpponentName(roomData.name0);
     setRoomCode(code);
     setMySlot(1);
     setScreen("game");
@@ -1940,8 +1950,15 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.54</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.55</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
+        <input
+          value={playerName}
+          onChange={e=>setPlayerName(e.target.value)}
+          placeholder="プレイヤー名を入力"
+          maxLength={12}
+          style={{...st.input, letterSpacing:1, marginBottom:4}}
+        />
         <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           <input value={inputCode} onChange={e=>setInputCode(e.target.value.toUpperCase())} placeholder="合言葉 (例: AB3K)" maxLength={4} style={st.input}/>
@@ -1988,6 +2005,8 @@ function App() {
         mySlot={mySlot}
         onPushState={pushState}
         remoteState={hasValidGs ? remoteState : null}
+        playerName={playerName}
+        opponentName={opponentName}
       />
     );
   }
