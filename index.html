@@ -2,9 +2,9 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="cache-bust" content="v1.77-2026">
+  <meta name="cache-bust" content="v1.62-2026">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>OFC Pineapple Poker v1.77</title>
+  <title>OFC Pineapple Poker v1.62</title>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
@@ -492,7 +492,6 @@ function royaltyBot(cards) {
 // ── Game state ─────────────────────────────────────────────────────────────
 const INIT_ROWS = [[], [], []]; // top(3), mid(5), bot(5)
 const ROW_CAPACITY = [3, 5, 5];
-const SUIT_VAL = {"♠":3,"♥":2,"♣":1,"♦":0}; // spade strongest
 
 
 function initGameState(prevFantasyland) {
@@ -688,8 +687,6 @@ function PlayerBoard({ player, playerIdx, turn, onRowClick, selectedCard, isOppo
 
 // ── Main Game ──────────────────────────────────────────────────────────────
 function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName }) {
-  // Define myPlayerIdx immediately - used throughout
-  const myPlayerIdx = (mySlot !== null && mySlot !== undefined) ? Number(mySlot) : 0;
   const [gs, setGs] = React.useState(null);
   // Draft state: cards tentatively placed this turn (before confirm)
   // draftRows: player's rows with draft placements
@@ -705,8 +702,7 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
   const [gameOver, setGameOver] = React.useState(false);
   const [fantasyDraft, setFantasyDraft] = React.useState([null, null]);
   const [baseRows, setBaseRows] = React.useState(null);
-  const [buttonPlayer, setButtonPlayer] = React.useState(0);
-  const [flipState, setFlipState] = React.useState(null); // {card0, card1, winner, rounds} // 0 or 1, btn player is dealer/後攻 // rows at start of turn (for isDraft calc)
+  const [buttonPlayer, setButtonPlayer] = React.useState(0); // 0 or 1, btn player is dealer/後攻 // rows at start of turn (for isDraft calc)
 
   // Apply remote state when received
   React.useEffect(() => {
@@ -821,12 +817,7 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
         setGameOver(remoteState.gameOver);
       }
       setShowScore(remoteState.showScore || null);
-      // Sync flip state: if valid gs arrived → game started → clear flip
-      if (remoteState.gs && remoteState.gs.players) {
-        setFlipState(null);
-      } else if (remoteState.flip) {
-        setFlipState(remoteState.flip);
-      }
+
     } catch(e) {
       console.error("State apply error:", e);
     }
@@ -842,39 +833,16 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
       gameOver: (extra && extra.go !== undefined) ? extra.go : false,
       showScore: (extra && extra.ss !== undefined) ? extra.ss : null,
     };
-    // Include flip field if provided
-    if (extra && "flip" in extra) payload.flip = extra.flip;
     onPushState(payload);
   }
 
   function startGame(rounds) {
-    // Deal 1 card each to decide button
-    const deck52 = [];
-    for (const s of ["♠","♥","♦","♣"]) for (const r of ["2","3","4","5","6","7","8","9","T","J","Q","K","A"]) deck52.push({r,s,id:r+s});
-    for (let i = deck52.length-1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i+1));
-      [deck52[i], deck52[j]] = [deck52[j], deck52[i]];
-    }
-    const card0 = deck52[0];
-    const card1 = deck52[1];
-    const rv0 = RANK_VAL[card0.r], rv1 = RANK_VAL[card1.r];
-    const sv0 = SUIT_VAL[card0.s], sv1 = SUIT_VAL[card1.s];
-    let winner = 0;
-    if (rv1 > rv0) winner = 1;
-    else if (rv1 === rv0 && sv1 > sv0) winner = 1;
-    const fs = { card0, card1, winner, rounds };
-    setFlipState(fs);
     setTotalRounds(rounds);
     setCurrentRound(1);
     setTotalScores([0, 0]);
     setGameOver(false);
-    pushToFirebase(null, { flip: fs, tr: rounds, cr: 1, ts: [0,0] });
-  }
-
-  function startGameAfterFlip(winner, rounds) {
-    const btn = winner;
+    const btn = 0;
     setButtonPlayer(btn);
-    setFlipState(null);
     const g = initGameState(null);
     g.buttonPlayer = btn;
     const newGs = dealInitial(g);
@@ -884,12 +852,10 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
     setSelectedHandIdx(null);
     setDragCardIdx(null);
     setShowScore(null);
-    pushToFirebase(newGs, { tr: rounds, cr: 1, ts: [0,0], go: false, ss: null, flip: null });
-    // Also clear flip in firebase directly to ensure guest sees game start
+    pushToFirebase(newGs, { tr: rounds, cr: 1, ts: [0,0], go: false, ss: null });
   }
 
-
-  function startNextRound(newTotals, nextFL) {
+    function startNextRound(newTotals, nextFL) {
     if (currentRound >= totalRounds) {
       setGameOver(true);
       pushToFirebase(gs, { go: true });
@@ -1426,9 +1392,6 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  // Early return for null gs (flip screen or waiting screen handles this)
-  if (!gs) return null;
-
   const opponentIdx = myPlayerIdx === 0 ? 1 : 0;
   const isMyTurn = !gs.roundOver && (() => {
     const _phase = String(gs.phase || "").trim();
@@ -1487,6 +1450,12 @@ function OFCGame({ mySlot, onPushState, remoteState, playerName, opponentName })
         <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"center",flexWrap:"wrap",marginTop:6}}>
           <div style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:20,padding:"3px 12px",fontSize:11,color:"rgba(255,255,255,0.5)",letterSpacing:1}}>
             ROUND {currentRound}/{totalRounds}
+            {iAmButton
+              ? <span style={{marginLeft:6,display:"inline-flex",alignItems:"center",gap:2,color:"rgba(255,215,0,0.8)"}}>
+                  <img src={BUTTON_IMG} style={{width:28,height:28,objectFit:"contain"}}/>後攻
+                </span>
+              : <span style={{marginLeft:6,color:"rgba(255,255,255,0.6)"}}>▶ 先攻</span>
+            }
             {iAmButton
               ? <span style={{marginLeft:6,display:"inline-flex",alignItems:"center",gap:2,color:"rgba(255,215,0,0.8)"}}>
                   <img src={BUTTON_IMG} style={{width:28,height:28,objectFit:"contain"}}/>後攻
@@ -1957,7 +1926,7 @@ function App() {
     <div style={st.page}>
       <div style={{fontSize:56,marginBottom:4}}>🃏</div>
       <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
-      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.77</div>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.62</div>
       <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
         <input
           value={playerName}
@@ -1998,9 +1967,8 @@ function App() {
       Array.isArray(remoteState.gs.players) &&
       remoteState.gs.players.length === 2 &&
       remoteState.gs.turn !== undefined;
-    const hasFlip = remoteState && remoteState.flip;
 
-    if (!hasValidGs && !hasFlip && mySlot === 1) return (
+    if (!hasValidGs && mySlot === 1) return (
       <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0d2440,#060d18)",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontFamily:"Georgia,serif",flexDirection:"column",gap:16}}>
         <div style={{fontSize:48}}>⏳</div>
         <div style={{fontSize:18}}>ホストがゲームを開始するのを待っています...</div>
@@ -2012,7 +1980,7 @@ function App() {
       <OFCGame
         mySlot={mySlot}
         onPushState={pushState}
-        remoteState={(hasValidGs || hasFlip) ? remoteState : null}
+        remoteState={hasValidGs ? remoteState : null}
         playerName={playerName}
         opponentName={opponentName}
       />
@@ -2027,65 +1995,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </body>
 </html
 
-  // ── Card Flip Screen ──────────────────────────────────────────────────────
-  if (flipState && !gs) {
-    const { card0, card1, winner, rounds } = flipState;
-    const _myIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
-    const myCard = _myIdx === 0 ? card0 : card1;
-    const oppCard = _myIdx === 0 ? card1 : card0;
-    const myWon = winner === _myIdx;
-    const suitColor = s => (s==="♥"||s==="♦") ? "#ef4444" : "#e8dcc8";
-    return (
-      <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0d2440,#060d18)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",color:"#e8dcc8",padding:20,gap:20}}>
-        <div style={{fontSize:26,fontWeight:700,color:"#ffd700",letterSpacing:2}}>ボタン決定</div>
-        <div style={{fontSize:12,color:"rgba(255,255,255,0.4)"}}>数字が強い方がボタン（後攻）を獲得</div>
 
-        <div style={{display:"flex",gap:32,alignItems:"flex-end"}}>
-          {/* My card */}
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginBottom:6}}>{playerName||`Player ${_myIdx+1}`}（あなた）</div>
-            <div style={{background:"white",borderRadius:10,width:70,height:100,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:700,color:myCard?suitColor(myCard.s):"#999",boxShadow:"0 4px 16px rgba(0,0,0,0.5)"}}>
-              {myCard ? `${myCard.r}${myCard.s}` : "?"}
-            </div>
-          </div>
-          <div style={{fontSize:20,color:"rgba(255,255,255,0.3)",paddingBottom:40}}>VS</div>
-          {/* Opponent card */}
-          <div style={{textAlign:"center"}}>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginBottom:6}}>{opponentName||`Player ${(_myIdx===0?1:0)+1}`}（相手）</div>
-            <div style={{background:"white",borderRadius:10,width:70,height:100,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,fontWeight:700,color:oppCard?suitColor(oppCard.s):"#999",boxShadow:"0 4px 16px rgba(0,0,0,0.5)"}}>
-              {oppCard ? `${oppCard.r}${oppCard.s}` : "?"}
-            </div>
-          </div>
-        </div>
-
-        {/* Result */}
-        <div style={{textAlign:"center"}}>
-          <div style={{fontSize:20,fontWeight:700,color:myWon?"#ffd700":"rgba(255,255,255,0.5)"}}>
-            {myWon ? "🎉 あなたがボタン（後攻）を獲得！" : "相手がボタン（後攻）を獲得"}
-          </div>
-          <div style={{marginTop:6,fontSize:12,color:"rgba(255,255,255,0.4)"}}>
-            {myWon
-              ? <span style={{display:"inline-flex",alignItems:"center",gap:4}}><img src={BUTTON_IMG} style={{width:22,height:22,objectFit:"contain"}}/>後攻スタート</span>
-              : "あなたは先攻スタート"}
-          </div>
-        </div>
-
-        {/* Start button - only host */}
-        {_myIdx === 0
-          ? <button onClick={()=>startGameAfterFlip(winner,rounds)} style={{background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",color:"#0d1a2e",border:"none",borderRadius:12,padding:"12px 32px",fontSize:15,fontWeight:700,cursor:"pointer"}}>
-              ゲーム開始 →
-            </button>
-          : <div style={{color:"rgba(255,255,255,0.35)",fontSize:13}}>⏳ ホストがゲームを開始するのを待っています...</div>
-        }
-      </div>
-    );
-  }
-
-
-
-
-
-  if (!gs && mySlot === 0) return (
+  if (!gs) return (
     <div style={{
       minHeight:"100vh",
       background:"radial-gradient(ellipse at 50% 0%, #0d2440 0%, #060d18 70%)",
@@ -2167,8 +2078,636 @@ ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   }
 
   const currentTurn = gs.turn;
+  const myPlayerIdx = (mySlot !== null && mySlot !== undefined) ? mySlot : 0;
   const effectiveBtn = Number(gs.buttonPlayer !== undefined ? gs.buttonPlayer : 0);
   const iAmButton = effectiveBtn === myPlayerIdx;
   const opponentIsButton = effectiveBtn !== myPlayerIdx;
 
->
+  // ── Render ────────────────────────────────────────────────────────────────
+  if (!gs) return (
+    <div style={{
+      minHeight:"100vh",
+      background:"radial-gradient(ellipse at 50% 0%, #0d2440 0%, #060d18 70%)",
+      display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+      fontFamily:"'Crimson Text', Georgia, serif",
+      color:"#e8dcc8",
+    }}>
+      <div style={{textAlign:"center",maxWidth:480,padding:32}}>
+        <div style={{fontSize:56,marginBottom:8}}>🃏</div>
+        <h1 style={{
+          fontFamily:"'Playfair Display', 'Times New Roman', serif",
+          fontSize:42,margin:"0 0 8px",
+          background:"linear-gradient(135deg,#ffd700,#ffb300,#ffd700)",
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
+          letterSpacing:2,
+        }}>OFC Pineapple</h1>
+        <p style={{color:"rgba(232,220,200,0.6)",fontSize:16,marginBottom:8}}>Open Face Chinese Poker</p>
+        <p style={{color:"rgba(232,220,200,0.4)",fontSize:13,marginBottom:32,lineHeight:1.6}}>
+          Pineappleルール対応 / Fantasyland付き<br/>
+          同じ画面で2人プレイ
+        </p>
+        <div style={{
+          background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.1)",
+          borderRadius:12,padding:16,marginBottom:28,textAlign:"left",fontSize:13,lineHeight:1.8,
+          color:"rgba(232,220,200,0.7)"
+        }}>
+          <b style={{color:"#ffd700"}}>遊び方：</b><br/>
+          1. 手札カードをドラッグ→スロットへドロップ（またはタップ選択→列タップ）<br/>
+          2. ボードのカードをタップで手札に戻せます（置き直しOK）<br/>
+          3. ✔ 確定ボタンを押してターン終了<br/>
+          4. Bot ≥ Mid ≥ Top になるよう配置
+        </div>
+        <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+          {[5,10,20].map(n=>(
+            <button key={n} onClick={()=>startGame(n)} style={{
+              background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",
+              color:"#0d1a2e",border:"none",borderRadius:10,
+              padding:"12px 28px",fontSize:16,fontWeight:700,
+              cursor:"pointer",letterSpacing:1,
+              fontFamily:"'Playfair Display',serif",
+              boxShadow:"0 4px 24px rgba(255,215,0,0.3)",
+            }}>{n}ラウンド</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+
+  const currentTurn = gs.turn;
+  const opponentIdx = currentTurn === 0 ? 1 : 0;
+
+  // Build display player with draft rows
+  const displayPlayer = gs && draft ? {
+    ...gs.players[currentTurn],
+    rows: draft.rows,
+  } : gs?.players[currentTurn];
+
+  const handRaw = currentHand;
+  const remainingHand = handRaw.filter(Boolean);
+  const phase = gs.phase;
+
+  // Count how many placed this turn
+  const placedThisTurn = draft
+    ? (phase === "fantasyland"
+        ? draft.rows.reduce((s,r)=>s+r.length,0)
+        : countPlaced(draft.rows, gs.players[currentTurn].rows))
+    : 0;
+  const neededToPlace = phase === "initial_place" ? 5 : phase === "fantasyland" ? 13 : 2;
+  const maxToPlace = neededToPlace;
+  const canConfirm = placedThisTurn === maxToPlace;
+
+  return (
+    <div style={{
+      minHeight:"100vh",
+      background:"radial-gradient(ellipse at 50% 0%, #0d2440 0%, #060d18 70%)",
+      fontFamily:"'Crimson Text', Georgia, serif",
+      color:"#e8dcc8",
+      padding:"12px 8px",
+    }}
+    onDragOver={e=>e.preventDefault()}
+    >
+      {/* Header */}
+      <div style={{textAlign:"center",marginBottom:12}}>
+        <h2 style={{
+          fontFamily:"'Playfair Display',serif",
+          background:"linear-gradient(135deg,#ffd700,#ffb300)",
+          WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",
+          margin:0,fontSize:22,letterSpacing:2,
+        }}>OFC Pineapple</h2>
+        <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"center",flexWrap:"wrap",marginTop:6}}>
+          <div style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:20,padding:"3px 12px",fontSize:11,color:"rgba(255,255,255,0.5)",letterSpacing:1}}>
+            ROUND {currentRound}/{totalRounds}
+            {iAmButton
+              ? <span style={{marginLeft:6,display:"inline-flex",alignItems:"center",gap:2,color:"rgba(255,215,0,0.8)"}}>
+                  <img src={BUTTON_IMG} style={{width:28,height:28,objectFit:"contain"}}/>後攻
+                </span>
+              : <span style={{marginLeft:6,color:"rgba(255,255,255,0.6)"}}>▶ 先攻</span>
+            }
+          </div>
+          <div style={{display:"flex",gap:12,fontSize:12,color:"rgba(255,215,0,0.8)"}}>
+            <span>P1: <b>{totalScores[0]}</b></span>
+            <span>P2: <b>{totalScores[1]}</b></span>
+          </div>
+        </div>
+        <div style={{
+          display:"inline-block",marginTop:6,
+          background:"rgba(255,215,0,0.1)",border:"1px solid rgba(255,215,0,0.3)",
+          borderRadius:20,padding:"4px 16px",fontSize:13,color:"rgba(232,220,200,0.8)",
+        }}>
+          {gs.message || (phase==="initial_place"?`Player ${currentTurn+1}: 5枚を配置`:phase==="fantasyland"?`Player ${currentTurn+1}: FantasyLand ${gs.players[currentTurn]?.fantasyCardCount}枚から13枚を配置`:`Player ${currentTurn+1}のターン`)}
+        </div>
+      </div>
+
+      {/* Opponent board */}
+      <div style={{marginBottom:8,opacity:0.75}}>
+        <PlayerBoard player={gs.players[opponentIdx]} playerIdx={opponentIdx}
+          turn={currentTurn} isOpponent={true} onRowClick={()=>{}} selectedCard={null}
+          onDropToRow={null} dragOverRow={null}
+          isButton={opponentIsButton} opponentName={opponentName}/>
+      </div>
+
+      {/* Hand */}
+      {!gs.roundOver && (
+        <div style={{
+          background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.1)",
+          borderRadius:14,padding:"12px 16px",marginBottom:8,
+          textAlign:"center",
+        }}>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
+            {phase==="fantasyland"
+              ? <span style={{color:"#c084fc"}}>🌟 FANTASYLAND — {remainingHand.length}枚中13枚を配置してください</span>
+              : <>手札 — ドラッグ or タップして配置
+                {phase==="pineapple" && remainingHand.length===1 && (
+                  <span style={{color:"#f97316",marginLeft:8}}>※最後の1枚は自動で捨てられます</span>
+                )}
+              </>
+            }
+          </div>
+          <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+            {handRaw.map((card,i)=>card&&(
+              <div key={i}
+                draggable
+                onDragStart={e=>{
+                  e.dataTransfer.setData("handIdx", String(i));
+                  setDragCardIdx(i);
+                  setSelectedHandIdx(null);
+                }}
+                onDragEnd={()=>{setDragCardIdx(null);setDragOverRow(null);}}
+                onClick={()=>setSelectedHandIdx(selectedHandIdx===i?null:i)}
+                style={{cursor:"grab"}}
+              >
+                <CardEl card={card}
+                  selected={selectedHandIdx===i || dragCardIdx===i}
+                />
+              </div>
+            ))}
+          </div>
+          {selectedHandIdx!==null && (
+            <div style={{marginTop:10,fontSize:13,color:"rgba(255,215,0,0.8)"}}>
+              👆 ボードの列（Top/Mid/Bot）をタップして配置
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Current player board */}
+      <div style={{marginBottom:8}}
+        onDragOver={e=>{
+          e.preventDefault();
+          // Find which row is being hovered (handled in RowSlot)
+        }}
+      >
+        {displayPlayer && (
+          <div style={{
+            background:"rgba(255,215,0,0.04)",
+            border:"1px solid rgba(255,215,0,0.25)",
+            borderRadius:14, padding:"16px 20px",
+            position:"relative",
+          }}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <span style={{fontFamily:"'Playfair Display',serif",fontSize:16,color:"#ffd700",letterSpacing:1}}>
+                {iAmButton
+                  ? <span style={{display:"inline-flex",alignItems:"center",gap:4}}>
+                      <img src={BUTTON_IMG} style={{width:36,height:36,objectFit:"contain"}}/>
+                      {playerName || `Player ${myPlayerIdx+1}`}
+                    </span>
+                  : `▶ ${playerName || `Player ${myPlayerIdx+1}`}`}
+              </span>
+              {displayPlayer.inFantasyland && (
+                <span style={{background:"linear-gradient(90deg,#7c3aed,#a855f7)",color:"white",fontSize:11,padding:"2px 10px",borderRadius:20,fontWeight:700}}>
+                  🌟 FANTASYLAND
+                </span>
+              )}
+              {isFoul(currentRows) && (
+                <span style={{background:"#dc2626",color:"white",fontSize:11,padding:"2px 10px",borderRadius:20,fontWeight:700}}>
+                  ✗ FOUL
+                </span>
+              )}
+            </div>
+            {[["TOP",3,0],["MID",5,1],["BOT",5,2]].map(([label,cap,ri])=>{
+              const cards = currentRows[ri] || [];
+              const origLen = gs.players[currentTurn].rows[ri].length;
+              return (
+                <div key={ri} style={{marginBottom:10}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                    <span style={{fontSize:11,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:2,width:40}}>{label}</span>
+                    {cards.length===cap && (()=>{
+                      const hasJkr = cards.some(c=>isJoker(c));
+                      if(!hasJkr) return <span style={{fontSize:11,color:"#ffd700",fontStyle:"italic"}}>{evalHand(cards).name}</span>;
+                      const dummyRows = ri===0?[cards,[],[]] : ri===1?[[],cards,[]] : [[],[],cards];
+                      const resolved = resolveJokers(dummyRows);
+                      return <span style={{fontSize:11,color:"#ffd700",fontStyle:"italic"}}>{evalHand(resolved[ri]).name} 🃏</span>;
+                    })()}
+                  </div>
+                  <div style={{display:"flex",gap:6}}
+                    onDragOver={e=>{e.preventDefault();setDragOverRow(ri);}}
+                    onDragLeave={()=>setDragOverRow(null)}
+                    onDrop={e=>{
+                      e.preventDefault();
+                      const hi = parseInt(e.dataTransfer.getData("handIdx"),10);
+                      if(!isNaN(hi)) placeCard(hi, ri);
+                      setDragOverRow(null);
+                    }}
+                  >
+                    {Array.from({length:cap}).map((_,ci)=>{
+                      const card = cards[ci]||null;
+                      const isDraft = ci >= origLen; // placed this turn
+                      const isEmpty = !card;
+                      const isHover = dragOverRow===ri && isEmpty;
+                      return (
+                        <div key={ci}
+                          onClick={()=>{
+                            if(isDraft && card) {
+                              removeCardFromRow(ri, ci);
+                            } else if(!card && selectedHandIdx!==null) {
+                              placeCard(selectedHandIdx, ri);
+                            }
+                          }}
+                          style={{
+                            cursor: isDraft&&card?"pointer":(!card&&selectedHandIdx!==null?"pointer":"default"),
+                            outline: isHover?"2px solid rgba(255,215,0,0.7)":"none",
+                            borderRadius:7,
+                            transition:"outline 0.1s",
+                            background: isHover?"rgba(255,215,0,0.08)":"transparent",
+                            position:"relative",
+                          }}
+                        >
+                          <CardEl card={card} small={false}
+                            selected={isDraft&&card?true:false}
+                          />
+                          {isDraft && card && (
+                            <div style={{
+                              position:"absolute",top:-4,right:-4,
+                              background:"#ef4444",color:"white",
+                              borderRadius:"50%",width:16,height:16,
+                              display:"flex",alignItems:"center",justifyContent:"center",
+                              fontSize:10,fontWeight:700,cursor:"pointer",
+                              boxShadow:"0 1px 4px rgba(0,0,0,0.5)",
+                            }}>×</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Confirm button */}
+            {!gs.roundOver && (
+              <div style={{textAlign:"center",marginTop:12}}>
+                <button
+                  onClick={confirmTurn}
+                  disabled={!canConfirm}
+                  style={{
+                    background: canConfirm
+                      ? "linear-gradient(135deg,#166534,#22c55e,#166534)"
+                      : "rgba(255,255,255,0.1)",
+                    color: canConfirm ? "#fff" : "rgba(255,255,255,0.3)",
+                    border:"none",borderRadius:10,
+                    padding:"10px 36px",fontSize:16,fontWeight:700,
+                    cursor:canConfirm?"pointer":"not-allowed",
+                    letterSpacing:1,
+                    boxShadow: canConfirm?"0 4px 16px rgba(34,197,94,0.4)":"none",
+                    transition:"all 0.2s",
+                  }}
+                >
+                  {phase==="fantasyland" ? `🌟 配置確定 (${placedThisTurn}/13)` : `✔ 確定 (${placedThisTurn}/${neededToPlace})`}
+                </button>
+                {draft && (
+                  <div style={{marginTop:6,fontSize:11,color:"rgba(255,255,255,0.4)"}}>
+                    ※ 黄色ハイライトのカードはタップで取り消せます
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Score overlay */}
+      {showScore && !gameOver && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100,padding:16,overflowY:"auto"}}>
+          <div style={{background:"linear-gradient(135deg,#0d2440,#1a3a5c)",border:"2px solid rgba(255,215,0,0.5)",borderRadius:20,padding:24,maxWidth:420,width:"100%",textAlign:"center",boxShadow:"0 8px 40px rgba(0,0,0,0.7)"}}>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",letterSpacing:2,marginBottom:4}}>ROUND {currentRound} / {totalRounds}</div>
+            <h2 style={{fontFamily:"'Playfair Display',serif",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 16px",fontSize:22}}>ラウンド結果</h2>
+
+            {(()=>{
+              // Compute per-row royalties and win bonuses for display
+              const rowRoy0 = [showScore.royalty0?.top||0, showScore.royalty0?.mid||0, showScore.royalty0?.bot||0];
+              const rowRoy1 = [showScore.royalty1?.top||0, showScore.royalty1?.mid||0, showScore.royalty1?.bot||0];
+              const p0wins = (showScore.results||[]).filter(r=>r==="P1").length;
+              const p1wins = (showScore.results||[]).filter(r=>r==="P2").length;
+              const scoop0 = p0wins===3;
+              const scoop1 = p1wins===3;
+              return (
+                <>
+                  {["TOP","MID","BOT"].map((label,i)=>{
+                    const res = showScore.results?.[i];
+                    const win0 = res==="P1", win1 = res==="P2";
+                    return (
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:0,marginBottom:5,fontSize:11}}>
+                        <span style={{width:28,textAlign:"right",color:"rgba(255,255,255,0.4)",fontSize:10,flexShrink:0,marginRight:4}}>{label}</span>
+                        {/* P1: 固定幅の点数列 + 役名 */}
+                        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:0}}>
+                          <span style={{width:28,textAlign:"right",color:"#4ade80",fontSize:10,fontWeight:700}}>{win0?"+1":""}</span>
+                          <span style={{width:28,textAlign:"right",color:"#fbbf24",fontSize:10,fontWeight:700,marginRight:6}}>{rowRoy0[i]>0?`+${rowRoy0[i]}`:""}</span>
+                          <span style={{color:"#e8dcc8",textAlign:"right"}}>{showScore.hands0?.[i]?.name||""}</span>
+                        </div>
+                        {/* Result */}
+                        <span style={{width:32,textAlign:"center",fontWeight:700,fontSize:12,flexShrink:0,
+                          color:win0?"#4ade80":win1?"#f87171":"#ffd700"}}>
+                          {res||"—"}
+                        </span>
+                        {/* P2: 役名 + 固定幅の点数列 */}
+                        <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"flex-start",gap:0}}>
+                          <span style={{color:"#e8dcc8",textAlign:"left"}}>{showScore.hands1?.[i]?.name||""}</span>
+                          <span style={{width:28,textAlign:"left",color:"#fbbf24",fontSize:10,fontWeight:700,marginLeft:6}}>{rowRoy1[i]>0?`+${rowRoy1[i]}`:""}</span>
+                          <span style={{width:28,textAlign:"left",color:"#4ade80",fontSize:10,fontWeight:700}}>{win1?"+1":""}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {/* Scoop bonus */}
+                  {(scoop0||scoop1) && (
+                    <div style={{display:"flex",justifyContent:scoop0?"flex-start":"flex-end",padding:"2px 32px",marginBottom:4}}>
+                      <span style={{color:"#4ade80",fontSize:11,fontWeight:700}}>
+                        {scoop0?"← スクープ +3":"スクープ +3 →"}
+                      </span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+
+            {/* Round points */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:8,margin:"14px 0 10px",background:"rgba(0,0,0,0.3)",borderRadius:12,padding:14}}>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:28,fontWeight:700,color:"#ffd700",fontFamily:"'Playfair Display',serif"}}>{showScore.pts0||0}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)"}}>Player 1{showScore.foul0?" (FOUL)":""}</div>
+                {showScore.royalty0 && <div style={{fontSize:10,color:"rgba(255,215,0,0.5)"}}>Royalty +{Object.values(showScore.royalty0).reduce((a,b)=>a+b,0)}</div>}
+              </div>
+              <div style={{alignSelf:"center",color:"rgba(255,255,255,0.3)",fontSize:18}}>vs</div>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:28,fontWeight:700,color:"#ffd700",fontFamily:"'Playfair Display',serif"}}>{showScore.pts1||0}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)"}}>Player 2{showScore.foul1?" (FOUL)":""}</div>
+                {showScore.royalty1 && <div style={{fontSize:10,color:"rgba(255,215,0,0.5)"}}>Royalty +{Object.values(showScore.royalty1).reduce((a,b)=>a+b,0)}</div>}
+              </div>
+            </div>
+
+            {/* Cumulative totals */}
+            {totalRounds > 1 && (
+              <div style={{background:"rgba(255,215,0,0.08)",border:"1px solid rgba(255,215,0,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:12,fontSize:12}}>
+                <div style={{color:"rgba(255,255,255,0.5)",marginBottom:6,fontSize:10,letterSpacing:1}}>累計スコア</div>
+                <div style={{display:"flex",justifyContent:"space-around"}}>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontSize:22,fontWeight:700,color: totalScores[0]>totalScores[1]?"#4ade80":"#e8dcc8"}}>{totalScores[0]}</div>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>Player 1</div>
+                  </div>
+                  <div style={{alignSelf:"center",color:"rgba(255,255,255,0.2)"}}>—</div>
+                  <div style={{textAlign:"center"}}>
+                    <div style={{fontSize:22,fontWeight:700,color: totalScores[1]>totalScores[0]?"#4ade80":"#e8dcc8"}}>{totalScores[1]}</div>
+                    <div style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>Player 2</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(showScore.fantasyland0||showScore.fantasyland1||showScore.fantasylandContinue0||showScore.fantasylandContinue1) && (
+              <div style={{background:"linear-gradient(90deg,rgba(124,58,237,0.3),rgba(168,85,247,0.3))",border:"1px solid rgba(168,85,247,0.5)",borderRadius:10,padding:"8px 14px",marginBottom:12,fontSize:12}}>
+                {showScore.fantasylandContinue0 && <div>🌟 Player 1 ファンタジーランド継続！({showScore.nextFL?.[0]?.cardCount}枚)</div>}
+                {showScore.fantasylandContinue1 && <div>🌟 Player 2 ファンタジーランド継続！({showScore.nextFL?.[1]?.cardCount}枚)</div>}
+                {!showScore.fantasylandContinue0 && showScore.fantasyland0 && <div>🌟 Player 1 次ラウンドFantasyland突入！({showScore.nextFL?.[0]?.cardCount}枚)</div>}
+                {!showScore.fantasylandContinue1 && showScore.fantasyland1 && <div>🌟 Player 2 次ラウンドFantasyland突入！({showScore.nextFL?.[1]?.cardCount}枚)</div>}
+              </div>
+            )}
+
+            {currentRound < totalRounds ? (
+              <button onClick={()=>startNextRound(totalScores, showScore?.nextFL || [{active:false,cardCount:0},{active:false,cardCount:0}])} style={{background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",color:"#0d1a2e",border:"none",borderRadius:10,padding:"11px 32px",fontSize:15,fontWeight:700,cursor:"pointer",letterSpacing:1,fontFamily:"'Playfair Display',serif"}}>
+                次のラウンド ({currentRound+1}/{totalRounds}) →
+              </button>
+            ) : (
+              <button onClick={()=>setGameOver(true)} style={{background:"linear-gradient(135deg,#7c3aed,#a855f7)",color:"white",border:"none",borderRadius:10,padding:"11px 32px",fontSize:15,fontWeight:700,cursor:"pointer",letterSpacing:1}}>
+                最終結果を見る 🏆
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {gameOver && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:200,padding:16}}>
+          <div style={{background:"linear-gradient(135deg,#0d2440,#1a3a5c)",border:"2px solid rgba(255,215,0,0.6)",borderRadius:24,padding:36,maxWidth:380,width:"100%",textAlign:"center",boxShadow:"0 12px 60px rgba(0,0,0,0.8)"}}>
+            <div style={{fontSize:48,marginBottom:8}}>{totalScores[0]===totalScores[1]?"🤝":totalScores[0]>totalScores[1]?"🏆":"🏆"}</div>
+            <h2 style={{fontFamily:"'Playfair Display',serif",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",margin:"0 0 8px",fontSize:26}}>最終結果</h2>
+            <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginBottom:24}}>{totalRounds}ラウンド終了</div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:12,marginBottom:24,background:"rgba(0,0,0,0.3)",borderRadius:16,padding:20}}>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginBottom:4}}>Player 1</div>
+                <div style={{fontSize:48,fontWeight:900,color: totalScores[0]>=totalScores[1]?"#ffd700":"rgba(255,255,255,0.4)",fontFamily:"'Playfair Display',serif"}}>{totalScores[0]}</div>
+                {totalScores[0]>totalScores[1] && <div style={{fontSize:12,color:"#4ade80",marginTop:4}}>🏆 勝利！</div>}
+                {totalScores[0]===totalScores[1] && <div style={{fontSize:12,color:"#ffd700",marginTop:4}}>引き分け</div>}
+              </div>
+              <div style={{alignSelf:"center",color:"rgba(255,255,255,0.2)",fontSize:24}}>vs</div>
+              <div style={{textAlign:"center"}}>
+                <div style={{fontSize:13,color:"rgba(255,255,255,0.5)",marginBottom:4}}>Player 2</div>
+                <div style={{fontSize:48,fontWeight:900,color: totalScores[1]>=totalScores[0]?"#ffd700":"rgba(255,255,255,0.4)",fontFamily:"'Playfair Display',serif"}}>{totalScores[1]}</div>
+                {totalScores[1]>totalScores[0] && <div style={{fontSize:12,color:"#4ade80",marginTop:4}}>🏆 勝利！</div>}
+                {totalScores[1]===totalScores[0] && <div style={{fontSize:12,color:"#ffd700",marginTop:4}}>引き分け</div>}
+              </div>
+            </div>
+
+            <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+              {[5,10,20].map(n=>(
+                <button key={n} onClick={()=>startGame(n)} style={{background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",color:"#0d1a2e",border:"none",borderRadius:10,padding:"10px 20px",fontSize:14,fontWeight:700,cursor:"pointer"}}>
+                  {n}ラウンド
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Firebase helpers ─────────────────────────────────────────────────────────
+function fixArrays(obj) {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj !== "object") return obj;
+  const keys = Object.keys(obj);
+  if (keys.length > 0 && keys.every(k => !isNaN(parseInt(k)))) {
+    const arr = [];
+    keys.forEach(k => arr[parseInt(k)] = fixArrays(obj[k]));
+    return arr;
+  }
+  const result = {};
+  for (const k of keys) result[k] = fixArrays(obj[k]);
+  return result;
+}
+
+// ── Firebase ──────────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyCEbFunerjfcVmDMSw6cxxxCrdehI3H2e4",
+  authDomain: "poker-ofc.firebaseapp.com",
+  databaseURL: "https://poker-ofc-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "poker-ofc",
+  storageBucket: "poker-ofc.firebasestorage.app",
+  messagingSenderId: "797270001979",
+  appId: "1:797270001979:web:a792f0994f5175ca7c0f1e"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+function App() {
+  const [screen, setScreen] = React.useState("lobby");
+  const [playerName, setPlayerName] = React.useState("");
+  const [roomCode, setRoomCode] = React.useState("");
+  const [inputCode, setInputCode] = React.useState("");
+  const [mySlot, setMySlot] = React.useState(null);
+  const [error, setError] = React.useState("");
+  const [opponentReady, setOpponentReady] = React.useState(false);
+  const [opponentName, setOpponentName] = React.useState("");
+  const [remoteState, setRemoteState] = React.useState(null);
+  const [flipResult, setFlipResult] = React.useState(null); // { board, hand0, hand1, winner }
+  const [pendingRounds, setPendingRounds] = React.useState(null);
+
+  React.useEffect(() => {
+    if (screen !== "game" || !roomCode) return;
+    const ref = db.ref("rooms/" + roomCode + "/gameState");
+    ref.on("value", snap => {
+      const raw = snap.val();
+      if (raw) {
+        try { setRemoteState(fixArrays(raw)); }
+        catch(e) { console.error("Firebase parse error:", e); }
+      }
+    });
+    return () => ref.off();
+  }, [screen, roomCode]);
+
+  function pushState(data) {
+    if (!roomCode) return;
+    db.ref("rooms/" + roomCode + "/gameState").set(data);
+  }
+
+  function generateCode() {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let c = "";
+    for (let i = 0; i < 4; i++) c += chars[Math.floor(Math.random() * chars.length)];
+    return c;
+  }
+
+  async function createRoom() {
+    if (!playerName.trim()) { setError("プレイヤー名を入力してください"); return; }
+    const code = generateCode();
+    const ref = db.ref("rooms/" + code);
+    const snap = await ref.once("value");
+    if (snap.exists()) { createRoom(); return; }
+    await ref.set({ status: "waiting", createdAt: Date.now(), name0: playerName.trim() });
+    setRoomCode(code);
+    setMySlot(0);
+    setScreen("waiting");
+    ref.child("player1").on("value", s => {
+      if (s.val() === "ready") setOpponentReady(true);
+    });
+    ref.child("name1").on("value", s => {
+      if (s.val()) setOpponentName(s.val());
+    });
+  }
+
+  async function joinRoom() {
+    if (!playerName.trim()) { setError("プレイヤー名を入力してください"); return; }
+    const code = inputCode.toUpperCase().trim();
+    if (code.length !== 4) { setError("4文字のコードを入力してください"); return; }
+    const ref = db.ref("rooms/" + code);
+    const snap = await ref.once("value");
+    if (!snap.exists()) { setError("ルームが見つかりません"); return; }
+    await ref.child("player1").set("ready");
+    await ref.child("name1").set(playerName.trim());
+    const roomData = snap.val();
+    if (roomData.name0) setOpponentName(roomData.name0);
+    setRoomCode(code);
+    setMySlot(1);
+    setScreen("game");
+  }
+
+  const st = {
+    page: {minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0d2440 0%,#060d18 70%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",fontFamily:"Georgia,serif",color:"#e8dcc8",padding:20},
+    gold: {background:"linear-gradient(135deg,#b8860b,#ffd700,#b8860b)",color:"#0d1a2e",border:"none",borderRadius:12,padding:"14px 32px",fontSize:18,fontWeight:700,cursor:"pointer",width:"100%"},
+    input: {padding:"14px 16px",borderRadius:12,border:"1px solid rgba(255,215,0,0.3)",background:"rgba(255,255,255,0.05)",color:"#e8dcc8",fontSize:20,textAlign:"center",letterSpacing:6,outline:"none",width:"100%"},
+  };
+
+  if (screen === "lobby") return (
+    <div style={st.page}>
+      <div style={{fontSize:56,marginBottom:4}}>🃏</div>
+      <h1 style={{fontSize:34,margin:"0 0 2px",background:"linear-gradient(135deg,#ffd700,#ffb300)",WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",letterSpacing:2}}>OFC Pineapple</h1>
+      <div style={{fontSize:11,color:"rgba(255,215,0,0.4)",letterSpacing:2,marginBottom:32}}>v1.62</div>
+      <div style={{display:"flex",flexDirection:"column",gap:14,width:"100%",maxWidth:320}}>
+        <input
+          value={playerName}
+          onChange={e=>setPlayerName(e.target.value)}
+          placeholder="プレイヤー名を入力"
+          maxLength={12}
+          style={{...st.input, letterSpacing:1, marginBottom:4}}
+        />
+        <button onClick={createRoom} style={st.gold}>🏠 ルームを作る</button>
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <input value={inputCode} onChange={e=>setInputCode(e.target.value.toUpperCase())} placeholder="合言葉 (例: AB3K)" maxLength={4} style={st.input}/>
+          <button onClick={joinRoom} style={{...st.gold,background:"rgba(255,255,255,0.08)",color:"#e8dcc8",border:"1px solid rgba(255,255,255,0.2)"}}>🚪 ルームに参加</button>
+        </div>
+        {error && <div style={{color:"#f87171",textAlign:"center",fontSize:13}}>{error}</div>}
+      </div>
+    </div>
+  );
+
+  if (screen === "waiting") return (
+    <div style={st.page}>
+      <div style={{textAlign:"center",maxWidth:340}}>
+        <div style={{fontSize:48,marginBottom:12}}>⏳</div>
+        <h2 style={{color:"#ffd700",marginBottom:8,fontSize:22}}>友達を待っています</h2>
+        <p style={{color:"rgba(255,255,255,0.45)",marginBottom:20,fontSize:13}}>この合言葉を友達に伝えてください</p>
+        <div style={{background:"rgba(255,215,0,0.08)",border:"2px solid rgba(255,215,0,0.5)",borderRadius:16,padding:"20px 48px",marginBottom:24}}>
+          <div style={{fontSize:52,fontWeight:900,letterSpacing:10,color:"#ffd700",fontFamily:"monospace"}}>{roomCode}</div>
+        </div>
+        {opponentReady
+          ? <button onClick={()=>setScreen("game")} style={st.gold}>🎮 ゲーム開始！</button>
+          : <div style={{color:"rgba(255,255,255,0.35)",fontSize:13}}>● 接続待ち...</div>
+        }
+      </div>
+    </div>
+  );
+
+  if (screen === "game") {
+    const hasValidGs = remoteState && remoteState.gs &&
+      Array.isArray(remoteState.gs.players) &&
+      remoteState.gs.players.length === 2 &&
+      remoteState.gs.turn !== undefined;
+
+    if (!hasValidGs && mySlot === 1) return (
+      <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 50% 0%,#0d2440,#060d18)",display:"flex",alignItems:"center",justifyContent:"center",color:"#ffd700",fontFamily:"Georgia,serif",flexDirection:"column",gap:16}}>
+        <div style={{fontSize:48}}>⏳</div>
+        <div style={{fontSize:18}}>ホストがゲームを開始するのを待っています...</div>
+        <div style={{fontSize:12,color:"rgba(255,215,0,0.4)"}}>合言葉: {roomCode}</div>
+      </div>
+    );
+
+    return (
+      <OFCGame
+        mySlot={mySlot}
+        onPushState={pushState}
+        remoteState={hasValidGs ? remoteState : null}
+        playerName={playerName}
+        opponentName={opponentName}
+      />
+    );
+  }
+
+  return null;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+</script>
+</body>
+</html>
